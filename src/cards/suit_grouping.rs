@@ -1,41 +1,41 @@
 use std::usize;
 
-use crate::cards::{
-    card::{Card, NUM_SUITS, Suit},
-    hand::HAND_EVALUATION_SIZE,
+use crate::{
+    cards::{
+        card::{Card, NUM_SUITS, Rank, Suit},
+        hand::HAND_EVALUATION_SIZE,
+    },
+    datastructures::stack_vec::StackVec,
 };
 
 // Groups cards by suit for hand evaluation.
 //
 // The implementation here avoids heap allocations.
+#[derive(Clone, Copy)]
 pub struct SuitGrouping {
-    groups: [[Card; HAND_EVALUATION_SIZE]; NUM_SUITS],
-    lengths: [usize; NUM_SUITS],
+    groups: [StackVec<Rank, HAND_EVALUATION_SIZE>; NUM_SUITS],
 }
 
 impl SuitGrouping {
     pub fn new() -> Self {
-        let arbitrary_card = Card::TWO_CLUB;
         Self {
-            groups: [[arbitrary_card; HAND_EVALUATION_SIZE]; NUM_SUITS],
-            lengths: [0; NUM_SUITS],
+            groups: [StackVec::new(); NUM_SUITS],
         }
     }
 
     // Panics if there are already HAND_EVALUATION_SIZE cards for the suit.
     pub fn insert(&mut self, card: Card) {
-        self.groups[card.suit as usize][self.lengths[card.suit as usize]] = card;
-        self.lengths[card.suit as usize] += 1;
+        self.groups[card.suit as usize].push(card.rank)
     }
 
-    pub fn get(&self, suit: Suit) -> &[Card] {
-        return &self.groups[suit as usize][0..self.lengths[suit as usize]];
+    pub fn get(&self, suit: Suit) -> &[Rank] {
+        return self.groups[suit as usize].as_slice();
     }
 
     // Empties each suit grouping.
     pub fn reset(&mut self) {
-        for length in &mut self.lengths {
-            *length = 0;
+        for group in &mut self.groups {
+            group.reset();
         }
     }
 }
@@ -56,10 +56,10 @@ mod tests {
 
         assert_eq!(
             grouping.get(Suit::Club),
-            &[Card::KING_CLUB, Card::TWO_CLUB, Card::THREE_CLUB]
+            &[Rank::King, Rank::Two, Rank::Three]
         );
         assert_eq!(grouping.get(Suit::Heart), &[]);
-        assert_eq!(grouping.get(Suit::Spade), &[Card::ACE_SPADE]);
+        assert_eq!(grouping.get(Suit::Spade), &[Rank::Ace]);
     }
 
     #[test]
@@ -67,20 +67,17 @@ mod tests {
         let mut grouping = SuitGrouping::new();
 
         grouping.insert(Card::KING_CLUB);
-        grouping.insert(Card::TWO_CLUB);
+        grouping.insert(Card::TWO_SPADE);
         grouping.insert(Card::ACE_SPADE);
 
         grouping.reset();
 
         grouping.insert(Card::KING_CLUB);
-        grouping.insert(Card::THREE_CLUB);
         grouping.insert(Card::THREE_HEART);
+        grouping.insert(Card::THREE_CLUB);
 
-        assert_eq!(
-            grouping.get(Suit::Club),
-            &[Card::KING_CLUB, Card::THREE_CLUB]
-        );
-        assert_eq!(grouping.get(Suit::Heart), &[Card::THREE_HEART]);
+        assert_eq!(grouping.get(Suit::Club), &[Rank::King, Rank::Three]);
+        assert_eq!(grouping.get(Suit::Heart), &[Rank::Three]);
         assert_eq!(grouping.get(Suit::Spade), &[]);
     }
 }
