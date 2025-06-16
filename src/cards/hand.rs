@@ -1,12 +1,9 @@
 use self::Hand::*;
-use std::{
-    cmp::{self, Ordering, Reverse, max},
-    mem::MaybeUninit,
-};
+use std::cmp::Reverse;
 
 use crate::{
     cards::{
-        card::{ALL_RANKS, ALL_SUITS, Card, NUM_RANKS, NUM_SUITS, Rank, Suit},
+        card::{ALL_RANKS, ALL_SUITS, Card, Rank},
         rank_counter::RankCounter,
         suit_grouping::SuitGrouping,
     },
@@ -320,7 +317,7 @@ mod tests {
     use crate::cards::hand::*;
 
     #[test]
-    fn test_straight_flush_normal() {
+    fn test_evaluate_hand_straight_flush_normal() {
         let hand = evaluate_hand(
             &[Card::EIGHT_SPADE, Card::NINE_SPADE],
             &[
@@ -341,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_flush_six_matching() {
+    fn test_evaluate_hand_straight_flush_six_matching() {
         let hand = evaluate_hand(
             &[Card::EIGHT_SPADE, Card::NINE_SPADE],
             &[
@@ -362,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_flush_seven_matching() {
+    fn test_evaluate_hand_straight_flush_seven_matching() {
         let hand = evaluate_hand(
             &[Card::EIGHT_SPADE, Card::NINE_SPADE],
             &[
@@ -383,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_flush_hearts() {
+    fn test_evaluate_hand_straight_flush_hearts() {
         let hand = evaluate_hand(
             &[Card::EIGHT_HEART, Card::NINE_HEART],
             &[
@@ -404,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_flush_beats_trips() {
+    fn test_evaluate_hand_straight_flush_beats_trips() {
         let hand = evaluate_hand(
             &[Card::EIGHT_SPADE, Card::NINE_SPADE],
             &[
@@ -425,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn test_four_of_a_kind_normal() {
+    fn test_evaluate_hand_four_of_a_kind_normal() {
         let hand = evaluate_hand(
             &[Card::TEN_HEART, Card::TEN_SPADE],
             &[
@@ -447,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn test_four_of_a_kind_with_pair_and_higher_kicker() {
+    fn test_evaluate_hand_four_of_a_kind_with_pair_and_higher_kicker() {
         let hand = evaluate_hand(
             &[Card::TEN_HEART, Card::TEN_SPADE],
             &[
@@ -469,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn test_four_of_a_kind_with_pair_and_lower_kicker() {
+    fn test_evaluate_hand_four_of_a_kind_with_pair_and_lower_kicker() {
         let hand = evaluate_hand(
             &[Card::TEN_HEART, Card::TEN_SPADE],
             &[
@@ -491,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn test_four_of_a_kind_with_pair_and_trips() {
+    fn test_evaluate_hand_four_of_a_kind_with_pair_and_trips() {
         let hand = evaluate_hand(
             &[Card::TEN_HEART, Card::TEN_SPADE],
             &[
@@ -513,7 +510,7 @@ mod tests {
     }
 
     #[test]
-    fn test_boat_normal() {
+    fn test_evaluate_hand_boat_normal() {
         let hand = evaluate_hand(
             &[Card::TEN_HEART, Card::TEN_SPADE],
             &[
@@ -535,7 +532,7 @@ mod tests {
     }
 
     #[test]
-    fn test_boat_two_pairs() {
+    fn test_evaluate_hand_boat_two_pairs() {
         let hand = evaluate_hand(
             &[Card::TEN_HEART, Card::TEN_SPADE],
             &[
@@ -557,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_normal() {
+    fn test_evaluate_hand_flush_normal() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -578,7 +575,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_six_matching() {
+    fn test_evaluate_hand_flush_six_matching() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -599,7 +596,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_seven_matching() {
+    fn test_evaluate_hand_flush_seven_matching() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -620,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_beats_straight() {
+    fn test_evaluate_hand_flush_beats_straight() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -641,7 +638,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_beats_trips() {
+    fn test_evaluate_hand_flush_beats_trips() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -662,7 +659,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flush_beats_two_pair() {
+    fn test_evaluate_hand_flush_beats_two_pair() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -683,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_normal() {
+    fn test_evaluate_hand_straight_normal() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -704,7 +701,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_six() {
+    fn test_evaluate_hand_straight_six() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -725,7 +722,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_seven() {
+    fn test_evaluate_hand_straight_seven() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -746,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_beats_trips() {
+    fn test_evaluate_hand_straight_beats_trips() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -767,7 +764,7 @@ mod tests {
     }
 
     #[test]
-    fn test_straight_beats_two_pair() {
+    fn test_evaluate_hand_straight_beats_two_pair() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::NINE_CLUB],
             &[
@@ -788,7 +785,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trips_normal() {
+    fn test_evaluate_hand_trips_normal() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -810,7 +807,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trips_multiple() {
+    fn test_evaluate_hand_trips_multiple() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -832,7 +829,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trips_multiple_lower_kicker() {
+    fn test_evaluate_hand_trips_multiple_lower_kicker() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -854,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trips_multiple_higher_kicker() {
+    fn test_evaluate_hand_trips_multiple_higher_kicker() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -876,7 +873,7 @@ mod tests {
     }
 
     #[test]
-    fn test_two_pair_normal() {
+    fn test_evaluate_hand_two_pair_normal() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -899,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn test_two_pair_three_pairs_higher_kicker() {
+    fn test_evaluate_hand_two_pair_three_pairs_higher_kicker() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -922,7 +919,7 @@ mod tests {
     }
 
     #[test]
-    fn test_two_pair_three_pairs_lower_kicker() {
+    fn test_evaluate_hand_two_pair_three_pairs_lower_kicker() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -945,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn test_two_pair_all_kickers_lower() {
+    fn test_evaluate_hand_two_pair_all_kickers_lower() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
             &[
@@ -968,7 +965,7 @@ mod tests {
     }
 
     #[test]
-    fn test_two_pair_not_pocket_pair() {
+    fn test_evaluate_hand_two_pair_not_pocket_pair() {
         let hand = evaluate_hand(
             &[Card::JACK_CLUB, Card::EIGHT_SPADE],
             &[
@@ -991,7 +988,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pair_normal() {
+    fn test_evaluate_hand_pair_normal() {
         let hand = evaluate_hand(
             &[Card::JACK_CLUB, Card::EIGHT_SPADE],
             &[
@@ -1013,7 +1010,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pair_higher_kickers() {
+    fn test_evaluate_hand_pair_higher_kickers() {
         let hand = evaluate_hand(
             &[Card::FIVE_CLUB, Card::EIGHT_SPADE],
             &[
@@ -1035,7 +1032,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pair_lower_kickers() {
+    fn test_evaluate_hand_pair_lower_kickers() {
         let hand = evaluate_hand(
             &[Card::ACE_CLUB, Card::ACE_SPADE],
             &[
@@ -1057,7 +1054,7 @@ mod tests {
     }
 
     #[test]
-    fn test_high_card() {
+    fn test_evaluate_hand_high_card() {
         let hand = evaluate_hand(
             &[Card::KING_CLUB, Card::QUEEN_CLUB],
             &[
@@ -1079,7 +1076,7 @@ mod tests {
     }
 
     #[test]
-    fn test_high_card_one_card_from_pocket() {
+    fn test_evaluate_hand_high_card_one_card_from_pocket() {
         let hand = evaluate_hand(
             &[Card::KING_CLUB, Card::TWO_CLUB],
             &[
@@ -1101,7 +1098,7 @@ mod tests {
     }
 
     #[test]
-    fn test_high_card_nothing_from_pocket() {
+    fn test_evaluate_hand_high_card_nothing_from_pocket() {
         let hand = evaluate_hand(
             &[Card::THREE_CLUB, Card::TWO_CLUB],
             &[
@@ -1120,5 +1117,74 @@ mod tests {
                 kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five],
             }
         );
+    }
+
+    #[test]
+    fn test_hand_cmp_straight_flush_vs_other() {
+        let h1 = StraightFlush {
+            highest_rank: Rank::Jack,
+        };
+        let h2 = FourOfAKind {
+            rank: Rank::Ace,
+            kicker: Rank::King,
+        };
+
+        assert!(h1 > h2);
+    }
+
+    #[test]
+    fn test_hand_cmp_three_of_a_kind() {
+        let h1 = ThreeOfAKind {
+            rank: Rank::King,
+            kickers_sorted_desc: [Rank::Ace, Rank::Queen],
+        };
+        let h2 = ThreeOfAKind {
+            rank: Rank::Ace,
+            kickers_sorted_desc: [Rank::King, Rank::Queen],
+        };
+
+        assert!(h1 < h2);
+    }
+
+    #[test]
+    fn test_hand_cmp_three_of_a_kind_first_kicker() {
+        let h1 = ThreeOfAKind {
+            rank: Rank::King,
+            kickers_sorted_desc: [Rank::Ace, Rank::Ten],
+        };
+        let h2 = ThreeOfAKind {
+            rank: Rank::King,
+            kickers_sorted_desc: [Rank::Queen, Rank::Ten],
+        };
+
+        assert!(h1 > h2);
+    }
+
+    #[test]
+    fn test_hand_cmp_three_of_a_kind_second_kicker() {
+        let h1 = ThreeOfAKind {
+            rank: Rank::King,
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
+        };
+        let h2 = ThreeOfAKind {
+            rank: Rank::King,
+            kickers_sorted_desc: [Rank::Ace, Rank::Ten],
+        };
+
+        assert!(h1 > h2);
+    }
+
+    #[test]
+    fn test_hand_cmp_three_of_a_kind_equal() {
+        let h1 = ThreeOfAKind {
+            rank: Rank::King,
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
+        };
+        let h2 = ThreeOfAKind {
+            rank: Rank::King,
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
+        };
+
+        assert!(h1 == h2);
     }
 }
