@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 #[repr(u8)]
 pub enum Suit {
@@ -5,6 +7,17 @@ pub enum Suit {
     Diamond = 1,
     Heart = 2,
     Spade = 3,
+}
+
+impl Display for Suit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Suit::Club => "♣",
+            Suit::Diamond => "♦",
+            Suit::Heart => "♥",
+            Suit::Spade => "♠",
+        })
+    }
 }
 
 pub const NUM_SUITS: usize = 4;
@@ -29,6 +42,26 @@ pub enum Rank {
     Ace = 12,
 }
 
+impl Display for Rank {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Rank::Two => "2",
+            Rank::Three => "3",
+            Rank::Four => "4",
+            Rank::Five => "5",
+            Rank::Six => "6",
+            Rank::Seven => "7",
+            Rank::Eight => "8",
+            Rank::Nine => "9",
+            Rank::Ten => "T",
+            Rank::Jack => "J",
+            Rank::Queen => "Q",
+            Rank::King => "K",
+            Rank::Ace => "A",
+        })
+    }
+}
+
 pub const NUM_RANKS: usize = 13;
 
 pub const ALL_RANKS: [Rank; NUM_RANKS] = [
@@ -51,6 +84,13 @@ pub const ALL_RANKS: [Rank; NUM_RANKS] = [
 pub struct Card {
     pub rank: Rank,
     pub suit: Suit,
+}
+
+impl Display for Card {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.rank.fmt(f)?;
+        self.suit.fmt(f)
+    }
 }
 
 impl Card {

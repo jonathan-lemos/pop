@@ -1,5 +1,5 @@
 use self::Hand::*;
-use std::cmp::Reverse;
+use std::{cmp::Reverse, collections::HashSet};
 
 use crate::{
     cards::{
@@ -69,9 +69,36 @@ fn group_by_suit(cards: &[Card; HAND_EVALUATION_SIZE]) -> SuitGrouping {
     return groupings;
 }
 
+fn straight_high_rank_alt(ranks: &[Rank]) -> Option<Rank> {
+    let unique_ranks = ranks.into_iter().map(|x| *x).collect::<HashSet<Rank>>();
+    let mut ranks = unique_ranks.into_iter().collect::<Vec<Rank>>();
+    ranks.sort_by_key(|k| Reverse(*k));
+
+    if ranks.len() < 5 {
+        return None;
+    }
+
+    for i in 0..(ranks.len() - 4) {
+        let mut hit = true;
+        for j in 1..5 {
+            if ranks[i + j] as usize + 1 != ranks[i + j - 1] as usize {
+                hit = false;
+                break;
+            }
+        }
+        if hit {
+            return Some(ranks[i]);
+        }
+    }
+    return None;
+}
+
 // `ranks` must be sorted in descending order
 fn straight_high_rank(ranks: &[Rank]) -> Option<Rank> {
     if ranks.len() < 5 {
+        if straight_high_rank_alt(ranks) != None {
+            panic!("fast impl returned when slow impl wouldn't",)
+        }
         return None;
     }
 
@@ -99,11 +126,22 @@ fn straight_high_rank(ranks: &[Rank]) -> Option<Rank> {
         idx += 1;
     }
 
-    if straight_len == 5 {
+    let v = if straight_len == 5 {
         Some(high_rank)
     } else {
         None
+    };
+
+    if v != straight_high_rank_alt(ranks) {
+        panic!(
+            "On ranks {:?}, fast impl = {:?}, slow impl = {:?}",
+            ranks,
+            v,
+            straight_high_rank_alt(ranks)
+        )
     }
+
+    v
 }
 
 fn hand_evaluation_pool(pocket: &[Card; 2], board: &[Card; 5]) -> [Card; 7] {
