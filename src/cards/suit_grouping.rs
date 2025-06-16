@@ -3,7 +3,7 @@ use std::usize;
 use crate::{
     cards::{
         card::{Card, NUM_SUITS, Rank, Suit},
-        hand::HAND_EVALUATION_SIZE,
+        hand::HAND_SIZE,
     },
     datastructures::stack_vec::StackVec,
 };
@@ -13,7 +13,7 @@ use crate::{
 // The implementation here avoids heap allocations.
 #[derive(Clone, Copy)]
 pub struct SuitGrouping {
-    groups: [StackVec<Rank, HAND_EVALUATION_SIZE>; NUM_SUITS],
+    groups: [StackVec<Rank, HAND_SIZE>; NUM_SUITS],
 }
 
 impl SuitGrouping {
@@ -23,7 +23,7 @@ impl SuitGrouping {
         }
     }
 
-    // No-op if there are already HAND_EVALUATION_SIZE cards for the suit.
+    // No-op if there are already 7 cards for the suit.
     pub fn insert(&mut self, card: Card) {
         self.groups[card.suit as usize].push(card.rank)
     }

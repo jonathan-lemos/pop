@@ -331,6 +331,10 @@ const fn gen_all_cards() -> [Card; NUM_CARDS] {
 
 pub const ALL_CARDS: [Card; NUM_CARDS] = gen_all_cards();
 
+pub const fn card_index(card: Card) -> usize {
+    return (card.rank as usize) * 4 + (card.suit as usize);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,5 +368,12 @@ mod tests {
             .collect::<HashSet<usize>>();
 
         assert_eq!(unique_usizes.len(), ALL_RANKS.len());
+    }
+
+    #[test]
+    fn card_index_bijective() {
+        for (i, card) in ALL_CARDS.iter().enumerate() {
+            assert_eq!(i, card_index(*card));
+        }
     }
 }
