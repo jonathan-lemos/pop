@@ -66,64 +66,11 @@ fn group_by_suit(cards: &[Card; HAND_EVALUATION_SIZE]) -> SuitGrouping {
     for card in cards {
         groupings.insert(*card);
     }
-
-    let mut sum_len = 0;
-    for suit in ALL_SUITS {
-        sum_len += groupings.get(suit).len();
-    }
-    assert_eq!(sum_len, 7);
-
     return groupings;
-}
-
-/*
-fn straight_high_rank_alt(ranks: &[Rank]) -> Option<Rank> {
-    let unique_ranks = ranks.into_iter().map(|x| *x).collect::<HashSet<Rank>>();
-    let mut ranks = unique_ranks.into_iter().collect::<Vec<Rank>>();
-    ranks.sort_by_key(|k| Reverse(*k));
-
-    for i in 0..ranks.len() {
-        let mut window = Vec::new();
-        for j in 0..5 {
-            let idx = i + j;
-            if idx >= ranks.len() {
-                break;
-            }
-            window.push(ranks[idx]);
-        }
-
-        if window.len() < 5 {
-            continue;
-        }
-
-        assert_eq!(window.len(), 5);
-
-        let mut hit = true;
-        for j in 1..5 {
-            if (window[j] as usize) + 1 != window[j - 1] as usize {
-                hit = false;
-                break;
-            }
-        }
-
-        if hit {
-            return Some(window[0]);
-        }
-    }
-    return None;
-}
-*/
-
-fn assert_desc(slice: &[Rank]) {
-    let mut copy = slice.to_vec();
-    copy.sort_by_key(|c| Reverse(*c));
-    assert_eq!(copy.as_slice(), slice);
 }
 
 // `ranks` must be sorted in descending order
 fn straight_high_rank(ranks: &[Rank]) -> Option<Rank> {
-    assert_desc(ranks);
-
     if ranks.len() < 5 {
         return None;
     }
@@ -172,7 +119,7 @@ struct Cardinalities {
     pub four: Option<Rank>,
     pub trips: StackVec<Rank, 2>,
     pub pairs: StackVec<Rank, 3>,
-    pub kickers: StackVec<Rank, 7>,
+    pub kickers: StackVec<Rank, 5>,
 }
 
 impl Cardinalities {
@@ -198,23 +145,6 @@ impl Cardinalities {
                     by_rank.get(*rank)
                 ),
             }
-        }
-
-        let debug_sum = cardinalities.four.iter().len() * 4
-            + cardinalities.trips.len() * 3
-            + cardinalities.pairs.len() * 2
-            + cardinalities.kickers.len();
-
-        if debug_sum != 7 {
-            panic!(
-                "When evaluating {:?}, expected debug sum 7, was {}.\nfour:{:?}\nthree:{:?}\npairs:{:?}\nkickers:{:?}",
-                cards,
-                debug_sum,
-                cardinalities.four,
-                cardinalities.trips.as_slice(),
-                cardinalities.pairs.as_slice(),
-                cardinalities.kickers.as_slice()
-            );
         }
 
         cardinalities
