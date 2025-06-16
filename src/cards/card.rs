@@ -310,7 +310,7 @@ const fn gen_all_cards() -> [Card; NUM_CARDS] {
     let mut ret = [Card {
         rank: Rank::Two,
         suit: Suit::Club,
-    }; 52];
+    }; NUM_CARDS];
     let mut rank_index = 0;
     let mut suit_index = 0;
 
@@ -333,7 +333,7 @@ pub const ALL_CARDS: [Card; NUM_CARDS] = gen_all_cards();
 
 #[cfg(test)]
 mod tests {
-    use crate::cards::card::ALL_CARDS;
+    use super::*;
     use std::collections::HashSet;
 
     #[test]
@@ -344,5 +344,25 @@ mod tests {
     #[test]
     fn test_all_cards_has_52_cards() {
         assert_eq!(ALL_CARDS.len(), 52);
+    }
+
+    #[test]
+    fn all_suits_have_unique_usize() {
+        let unique_usizes = ALL_SUITS
+            .iter()
+            .map(|x| *x as usize)
+            .collect::<HashSet<usize>>();
+
+        assert_eq!(unique_usizes.len(), ALL_SUITS.len());
+    }
+
+    #[test]
+    fn all_ranks_have_unique_usize() {
+        let unique_usizes = ALL_RANKS
+            .iter()
+            .map(|x| *x as usize)
+            .collect::<HashSet<usize>>();
+
+        assert_eq!(unique_usizes.len(), ALL_RANKS.len());
     }
 }

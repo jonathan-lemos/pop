@@ -23,7 +23,7 @@ impl SuitGrouping {
         }
     }
 
-    // Panics if there are already HAND_EVALUATION_SIZE cards for the suit.
+    // No-op if there are already HAND_EVALUATION_SIZE cards for the suit.
     pub fn insert(&mut self, card: Card) {
         self.groups[card.suit as usize].push(card.rank)
     }
@@ -60,6 +60,33 @@ mod tests {
         );
         assert_eq!(grouping.get(Suit::Heart), &[]);
         assert_eq!(grouping.get(Suit::Spade), &[Rank::Ace]);
+    }
+
+    #[test]
+    fn test_suit_grouping_filled_up() {
+        let mut grouping = SuitGrouping::new();
+
+        grouping.insert(Card::TWO_CLUB);
+        grouping.insert(Card::THREE_CLUB);
+        grouping.insert(Card::FOUR_CLUB);
+        grouping.insert(Card::FIVE_CLUB);
+        grouping.insert(Card::SIX_CLUB);
+        grouping.insert(Card::SEVEN_CLUB);
+        grouping.insert(Card::EIGHT_CLUB);
+        grouping.insert(Card::NINE_CLUB);
+
+        assert_eq!(
+            grouping.get(Suit::Club),
+            &[
+                Rank::Two,
+                Rank::Three,
+                Rank::Four,
+                Rank::Five,
+                Rank::Six,
+                Rank::Seven,
+                Rank::Eight
+            ]
+        );
     }
 
     #[test]

@@ -66,39 +66,65 @@ fn group_by_suit(cards: &[Card; HAND_EVALUATION_SIZE]) -> SuitGrouping {
     for card in cards {
         groupings.insert(*card);
     }
+
+    let mut sum_len = 0;
+    for suit in ALL_SUITS {
+        sum_len += groupings.get(suit).len();
+    }
+    assert_eq!(sum_len, 7);
+
     return groupings;
 }
 
+/*
 fn straight_high_rank_alt(ranks: &[Rank]) -> Option<Rank> {
     let unique_ranks = ranks.into_iter().map(|x| *x).collect::<HashSet<Rank>>();
     let mut ranks = unique_ranks.into_iter().collect::<Vec<Rank>>();
     ranks.sort_by_key(|k| Reverse(*k));
 
-    if ranks.len() < 5 {
-        return None;
-    }
+    for i in 0..ranks.len() {
+        let mut window = Vec::new();
+        for j in 0..5 {
+            let idx = i + j;
+            if idx >= ranks.len() {
+                break;
+            }
+            window.push(ranks[idx]);
+        }
 
-    for i in 0..(ranks.len() - 4) {
+        if window.len() < 5 {
+            continue;
+        }
+
+        assert_eq!(window.len(), 5);
+
         let mut hit = true;
         for j in 1..5 {
-            if ranks[i + j] as usize + 1 != ranks[i + j - 1] as usize {
+            if (window[j] as usize) + 1 != window[j - 1] as usize {
                 hit = false;
                 break;
             }
         }
+
         if hit {
-            return Some(ranks[i]);
+            return Some(window[0]);
         }
     }
     return None;
 }
+*/
+
+fn assert_desc(slice: &[Rank]) {
+    let mut copy = slice.to_vec();
+    copy.sort_by_key(|c| Reverse(*c));
+    assert_eq!(copy.as_slice(), slice);
+}
 
 // `ranks` must be sorted in descending order
 fn straight_high_rank(ranks: &[Rank]) -> Option<Rank> {
+    assert_desc(ranks);
+
     if ranks.len() < 5 {
-        if straight_high_rank_alt(ranks) != None {
-            panic!("fast impl returned when slow impl wouldn't",)
-        }
         return None;
     }
 
@@ -107,7 +133,7 @@ fn straight_high_rank(ranks: &[Rank]) -> Option<Rank> {
     let mut idx = 1;
     let mut last_rank = ranks[0];
 
-    while idx + (5 - straight_len) <= ranks.len() {
+    while idx < ranks.len() {
         if ranks[idx] == last_rank {
             idx += 1;
             continue;
@@ -126,34 +152,18 @@ fn straight_high_rank(ranks: &[Rank]) -> Option<Rank> {
         idx += 1;
     }
 
-    let v = if straight_len == 5 {
+    if straight_len == 5 || (straight_len == 4 && high_rank == Rank::Five && ranks[0] == Rank::Ace)
+    {
         Some(high_rank)
     } else {
         None
-    };
-
-    if v != straight_high_rank_alt(ranks) {
-        panic!(
-            "On ranks {:?}, fast impl = {:?}, slow impl = {:?}",
-            ranks,
-            v,
-            straight_high_rank_alt(ranks)
-        )
     }
-
-    v
 }
 
 fn hand_evaluation_pool(pocket: &[Card; 2], board: &[Card; 5]) -> [Card; 7] {
-    let arbitrary_card = Card::TWO_CLUB;
-    let mut pool = [arbitrary_card; 7];
-    pool[0] = pocket[0];
-    pool[1] = pocket[1];
-    pool[2] = board[0];
-    pool[3] = board[1];
-    pool[4] = board[2];
-    pool[5] = board[3];
-    pool[6] = board[4];
+    let mut pool = [
+        pocket[0], pocket[1], board[0], board[1], board[2], board[3], board[4],
+    ];
     pool.sort_by_key(|c| Reverse(*c));
     return pool;
 }
@@ -162,7 +172,7 @@ struct Cardinalities {
     pub four: Option<Rank>,
     pub trips: StackVec<Rank, 2>,
     pub pairs: StackVec<Rank, 3>,
-    pub kickers: StackVec<Rank, 5>,
+    pub kickers: StackVec<Rank, 7>,
 }
 
 impl Cardinalities {
@@ -188,6 +198,23 @@ impl Cardinalities {
                     by_rank.get(*rank)
                 ),
             }
+        }
+
+        let debug_sum = cardinalities.four.iter().len() * 4
+            + cardinalities.trips.len() * 3
+            + cardinalities.pairs.len() * 2
+            + cardinalities.kickers.len();
+
+        if debug_sum != 7 {
+            panic!(
+                "When evaluating {:?}, expected debug sum 7, was {}.\nfour:{:?}\nthree:{:?}\npairs:{:?}\nkickers:{:?}",
+                cards,
+                debug_sum,
+                cardinalities.four,
+                cardinalities.trips.as_slice(),
+                cardinalities.pairs.as_slice(),
+                cardinalities.kickers.as_slice()
+            );
         }
 
         cardinalities
@@ -226,13 +253,18 @@ fn match_four_of_a_kind(cardinalities: &Cardinalities) -> Option<Hand> {
 }
 
 fn match_full_house(cardinalities: &Cardinalities) -> Option<Hand> {
-    if cardinalities.trips.is_empty() || cardinalities.pairs.is_empty() {
-        None
-    } else {
+    if cardinalities.trips.len() >= 2 {
+        Some(FullHouse {
+            triple: cardinalities.trips[0],
+            pair: cardinalities.trips[1],
+        })
+    } else if !cardinalities.trips.is_empty() && !cardinalities.pairs.is_empty() {
         Some(FullHouse {
             triple: cardinalities.trips[0],
             pair: cardinalities.pairs[0],
         })
+    } else {
+        None
     }
 }
 
@@ -460,6 +492,27 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_hand_straight_flush_a2345() {
+        let hand = evaluate_hand(
+            &[Card::ACE_SPADE, Card::TWO_SPADE],
+            &[
+                Card::THREE_SPADE,
+                Card::FOUR_SPADE,
+                Card::FIVE_SPADE,
+                Card::NINE_HEART,
+                Card::EIGHT_HEART,
+            ],
+        );
+
+        assert_eq!(
+            hand,
+            StraightFlush {
+                highest_rank: Rank::Five
+            }
+        );
+    }
+
+    #[test]
     fn test_evaluate_hand_four_of_a_kind_normal() {
         let hand = evaluate_hand(
             &[Card::TEN_HEART, Card::TEN_SPADE],
@@ -587,6 +640,28 @@ mod tests {
             FullHouse {
                 triple: Rank::Ten,
                 pair: Rank::King
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_boat_two_trips() {
+        let hand = evaluate_hand(
+            &[Card::TEN_HEART, Card::TEN_SPADE],
+            &[
+                Card::TEN_CLUB,
+                Card::SEVEN_HEART,
+                Card::SEVEN_CLUB,
+                Card::SEVEN_SPADE,
+                Card::KING_HEART,
+            ],
+        );
+
+        assert_eq!(
+            hand,
+            FullHouse {
+                triple: Rank::Ten,
+                pair: Rank::Seven
             }
         );
     }
@@ -823,6 +898,27 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_hand_straight_a2345() {
+        let hand = evaluate_hand(
+            &[Card::ACE_SPADE, Card::TWO_HEART],
+            &[
+                Card::THREE_CLUB,
+                Card::FOUR_DIAMOND,
+                Card::FIVE_SPADE,
+                Card::NINE_HEART,
+                Card::EIGHT_HEART,
+            ],
+        );
+
+        assert_eq!(
+            hand,
+            Straight {
+                highest_rank: Rank::Five
+            }
+        );
+    }
+
+    #[test]
     fn test_evaluate_hand_trips_normal() {
         let hand = evaluate_hand(
             &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
@@ -840,72 +936,6 @@ mod tests {
             ThreeOfAKind {
                 rank: Rank::Eight,
                 kickers_sorted_desc: [Rank::Jack, Rank::Seven]
-            }
-        );
-    }
-
-    #[test]
-    fn test_evaluate_hand_trips_multiple() {
-        let hand = evaluate_hand(
-            &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
-            &[
-                Card::SEVEN_DIAMOND,
-                Card::SEVEN_HEART,
-                Card::EIGHT_HEART,
-                Card::SEVEN_CLUB,
-                Card::JACK_CLUB,
-            ],
-        );
-
-        assert_eq!(
-            hand,
-            ThreeOfAKind {
-                rank: Rank::Eight,
-                kickers_sorted_desc: [Rank::Jack, Rank::Seven]
-            }
-        );
-    }
-
-    #[test]
-    fn test_evaluate_hand_trips_multiple_lower_kicker() {
-        let hand = evaluate_hand(
-            &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
-            &[
-                Card::JACK_DIAMOND,
-                Card::JACK_HEART,
-                Card::EIGHT_HEART,
-                Card::JACK_CLUB,
-                Card::TWO_CLUB,
-            ],
-        );
-
-        assert_eq!(
-            hand,
-            ThreeOfAKind {
-                rank: Rank::Jack,
-                kickers_sorted_desc: [Rank::Eight, Rank::Eight]
-            }
-        );
-    }
-
-    #[test]
-    fn test_evaluate_hand_trips_multiple_higher_kicker() {
-        let hand = evaluate_hand(
-            &[Card::EIGHT_CLUB, Card::EIGHT_SPADE],
-            &[
-                Card::JACK_DIAMOND,
-                Card::JACK_HEART,
-                Card::EIGHT_HEART,
-                Card::JACK_CLUB,
-                Card::ACE_CLUB,
-            ],
-        );
-
-        assert_eq!(
-            hand,
-            ThreeOfAKind {
-                rank: Rank::Jack,
-                kickers_sorted_desc: [Rank::Ace, Rank::Eight]
             }
         );
     }
