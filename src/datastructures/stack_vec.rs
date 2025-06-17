@@ -1,7 +1,10 @@
 use std::{
+    fmt::{Debug, Display},
     mem::MaybeUninit,
     ops::{Index, Range},
 };
+
+use crate::util::ui::format_comma_separated_values;
 
 // A vector whose memory lives entirely on the stack.
 #[derive(Clone, Copy)]
@@ -63,6 +66,26 @@ impl<T, const LENGTH: usize> Index<Range<usize>> for StackVec<T, LENGTH> {
     fn index(&self, index: Range<usize>) -> &Self::Output {
         assert!(index.end <= self.length);
         &self.elems[index]
+    }
+}
+
+impl<T: Debug, const LENGTH: usize> Debug for StackVec<T, LENGTH> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[")?;
+        format_comma_separated_values(self.as_slice().into_iter(), f, |v, fmt| {
+            Debug::fmt(&v, fmt)
+        })?;
+        f.write_str("]")
+    }
+}
+
+impl<T: Display, const LENGTH: usize> Display for StackVec<T, LENGTH> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[")?;
+        format_comma_separated_values(self.as_slice().into_iter(), f, |v, fmt| {
+            Display::fmt(&v, fmt)
+        })?;
+        f.write_str("]")
     }
 }
 

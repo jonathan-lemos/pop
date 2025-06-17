@@ -1,4 +1,9 @@
-use crate::cards::card::{ALL_CARDS, Card, Rank, Suit, card_index};
+use std::fmt::Display;
+
+use crate::{
+    cards::card::{ALL_CARDS, Card, Rank, Suit, card_index},
+    util::ui::format_comma_separated_values,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct CardSet {
@@ -41,6 +46,14 @@ impl FromIterator<Card> for CardSet {
             set.add(card);
         }
         set
+    }
+}
+
+impl Display for CardSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("{")?;
+        format_comma_separated_values(self.iter_desc(), f, |v, fmt| v.fmt(fmt))?;
+        f.write_str("}")
     }
 }
 

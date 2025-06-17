@@ -1,5 +1,5 @@
 use self::HandEvaluation::*;
-use std::{cmp::Reverse, mem::MaybeUninit};
+use std::{cmp::Reverse, fmt::Display};
 
 use crate::{
     cards::{
@@ -9,6 +9,7 @@ use crate::{
         suit_grouping::SuitGrouping,
     },
     datastructures::stack_vec::StackVec,
+    util::ui::format_comma_separated_values,
 };
 
 pub const HAND_SIZE: usize = 7;
@@ -25,20 +26,14 @@ impl Hand {
         Self { cardset }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Card> {
+    pub fn iter_desc(&self) -> impl Iterator<Item = Card> {
         self.cardset.iter_desc()
     }
+}
 
-    pub fn to_array(&self) -> [Card; HAND_SIZE] {
-        let mut i = 0;
-        let mut ret: [Card; HAND_SIZE] = unsafe { MaybeUninit::zeroed().assume_init() };
-
-        for card in self.cardset.iter_desc() {
-            ret[i] = card;
-            i += 1;
-        }
-
-        ret
+impl Display for Hand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        format_comma_separated_values(self.iter_desc(), f, |v, fmt| v.fmt(fmt))
     }
 }
 
@@ -82,7 +77,7 @@ pub enum HandEvaluation {
 
 fn count_ranks(cards: &Hand) -> RankCounter {
     let mut counter = RankCounter::new();
-    for card in cards.iter() {
+    for card in cards.iter_desc() {
         counter.inc(card.rank);
     }
     return counter;
@@ -90,7 +85,7 @@ fn count_ranks(cards: &Hand) -> RankCounter {
 
 fn group_by_suit(cards: &Hand) -> SuitGrouping {
     let mut groupings = SuitGrouping::new();
-    for card in cards.iter() {
+    for card in cards.iter_desc() {
         groupings.insert(card);
     }
     return groupings;
@@ -227,7 +222,7 @@ fn match_flush(by_suit: &SuitGrouping) -> Option<HandEvaluation> {
 }
 
 fn match_straight(cards: &Hand) -> Option<HandEvaluation> {
-    if let Some(highest_rank) = straight_high_rank(cards.iter().map(|x| x.rank)) {
+    if let Some(highest_rank) = straight_high_rank(cards.iter_desc().map(|x| x.rank)) {
         Some(Straight { highest_rank })
     } else {
         None
