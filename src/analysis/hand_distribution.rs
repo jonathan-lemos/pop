@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_hands_distribution() {
-        let hands = &[
+        let hands = [
             [
                 Card::TWO_CLUB,
                 Card::THREE_CLUB,
@@ -185,9 +185,12 @@ mod tests {
                 Card::SIX_HEART,
                 Card::NINE_HEART,
             ],
-        ];
+        ]
+        .iter()
+        .map(Hand::new)
+        .collect::<Vec<Hand>>();
 
-        let dist = HandDistribution::evaluate(hands);
+        let dist = HandDistribution::evaluate(hands.as_slice());
 
         // From https://en.wikipedia.org/wiki/Poker_probability#7-card_poker_hands
         assert_eq!(

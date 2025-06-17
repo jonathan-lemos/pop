@@ -11,7 +11,9 @@ pub fn all_seven_card_hands() -> Vec<Hand> {
                     for x5 in x4 + 1..ALL_CARDS.len() {
                         for x6 in x5 + 1..ALL_CARDS.len() {
                             for x7 in x6 + 1..ALL_CARDS.len() {
-                                ret.push([cs[x1], cs[x2], cs[x3], cs[x4], cs[x5], cs[x6], cs[x7]])
+                                ret.push(Hand::new(&[
+                                    cs[x1], cs[x2], cs[x3], cs[x4], cs[x5], cs[x6], cs[x7],
+                                ]))
                             }
                         }
                     }

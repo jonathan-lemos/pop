@@ -1,9 +1,10 @@
 use self::HandEvaluation::*;
-use std::cmp::Reverse;
+use std::{cmp::Reverse, mem::MaybeUninit};
 
 use crate::{
     cards::{
-        card::{ALL_CARDS, ALL_RANKS, ALL_SUITS, Card, Rank},
+        card::{ALL_RANKS, ALL_SUITS, Card, Rank},
+        cardset::CardSet,
         rank_counter::RankCounter,
         suit_grouping::SuitGrouping,
     },
@@ -12,25 +13,32 @@ use crate::{
 
 pub const HAND_SIZE: usize = 7;
 
-// The cards in a hand must be unique.
-pub type Hand = [Card; HAND_SIZE];
+#[derive(Debug, PartialEq, Eq)]
+pub struct Hand {
+    cardset: CardSet,
+}
 
-// In debug mode only, assert that the hand is valid.
-pub fn debug_assert_hand_valid(hand: &Hand) {
-    if cfg!(debug_assertions) {
-        let mut hand_sorted = *hand;
-        hand_sorted.sort_unstable();
+impl Hand {
+    pub fn new(cards: &[Card; HAND_SIZE]) -> Self {
+        let cardset = cards.into_iter().map(|x| *x).collect::<CardSet>();
+        debug_assert!(cardset.len() == HAND_SIZE);
+        Self { cardset }
+    }
 
-        for i in 1..hand.len() {
-            if hand_sorted[i - 1] == hand_sorted[i] {
-                panic!(
-                    "Hands must be unique, but in {:?}, {} == {}",
-                    hand,
-                    hand_sorted[i - 1],
-                    hand_sorted[i]
-                )
-            }
+    pub fn iter(&self) -> impl Iterator<Item = Card> {
+        self.cardset.iter_desc()
+    }
+
+    pub fn to_array(&self) -> [Card; HAND_SIZE] {
+        let mut i = 0;
+        let mut ret: [Card; HAND_SIZE] = unsafe { MaybeUninit::zeroed().assume_init() };
+
+        for card in self.cardset.iter_desc() {
+            ret[i] = card;
+            i += 1;
         }
+
+        ret
     }
 }
 
@@ -74,7 +82,7 @@ pub enum HandEvaluation {
 
 fn count_ranks(cards: &Hand) -> RankCounter {
     let mut counter = RankCounter::new();
-    for card in cards {
+    for card in cards.iter() {
         counter.inc(card.rank);
     }
     return counter;
@@ -82,44 +90,41 @@ fn count_ranks(cards: &Hand) -> RankCounter {
 
 fn group_by_suit(cards: &Hand) -> SuitGrouping {
     let mut groupings = SuitGrouping::new();
-    for card in cards {
-        groupings.insert(*card);
+    for card in cards.iter() {
+        groupings.insert(card);
     }
     return groupings;
 }
 
 // `ranks` must be sorted in descending order
-fn straight_high_rank(ranks: &[Rank]) -> Option<Rank> {
-    if ranks.len() < 5 {
-        return None;
-    }
+fn straight_high_rank<I: Iterator<Item = Rank>>(mut ranks: I) -> Option<Rank> {
+    let first = match ranks.next() {
+        Some(f) => f,
+        None => return None,
+    };
 
-    let mut high_rank = ranks[0];
+    let mut high_rank = first;
     let mut straight_len = 1;
-    let mut idx = 1;
-    let mut last_rank = ranks[0];
+    let mut last_rank = first;
 
-    while idx < ranks.len() {
-        if ranks[idx] == last_rank {
-            idx += 1;
+    while let Some(rank) = ranks.next() {
+        if rank == last_rank {
             continue;
         }
-        last_rank = ranks[idx];
+        last_rank = rank;
 
-        if high_rank > ranks[idx] && (high_rank as usize) - (ranks[idx] as usize) == straight_len {
+        if high_rank > rank && (high_rank as usize) - (rank as usize) == straight_len {
             straight_len += 1;
             if straight_len == 5 {
                 break;
             }
         } else {
-            high_rank = ranks[idx];
+            high_rank = rank;
             straight_len = 1;
         }
-        idx += 1;
     }
 
-    if straight_len == 5 || (straight_len == 4 && high_rank == Rank::Five && ranks[0] == Rank::Ace)
-    {
+    if straight_len == 5 || (straight_len == 4 && high_rank == Rank::Five && first == Rank::Ace) {
         Some(high_rank)
     } else {
         None
@@ -165,7 +170,7 @@ impl Cardinalities {
 // Each grouping must be sorted in descending order.
 fn match_straight_flush(by_suit: &SuitGrouping) -> Option<HandEvaluation> {
     for suit in ALL_SUITS {
-        if let Some(highest_rank) = straight_high_rank(by_suit.get(suit)) {
+        if let Some(highest_rank) = straight_high_rank(by_suit.get(suit).into_iter().map(|x| *x)) {
             return Some(StraightFlush { highest_rank });
         }
     }
@@ -222,17 +227,7 @@ fn match_flush(by_suit: &SuitGrouping) -> Option<HandEvaluation> {
 }
 
 fn match_straight(cards: &Hand) -> Option<HandEvaluation> {
-    let ranks = [
-        cards[0].rank,
-        cards[1].rank,
-        cards[2].rank,
-        cards[3].rank,
-        cards[4].rank,
-        cards[5].rank,
-        cards[6].rank,
-    ];
-
-    if let Some(highest_rank) = straight_high_rank(&ranks) {
+    if let Some(highest_rank) = straight_high_rank(cards.iter().map(|x| x.rank)) {
         Some(Straight { highest_rank })
     } else {
         None
@@ -309,19 +304,14 @@ fn match_high_card(cardinalities: &Cardinalities) -> HandEvaluation {
 
 impl HandEvaluation {
     pub fn evaluate(hand: &Hand) -> Self {
-        debug_assert_hand_valid(&hand);
-
-        let mut sorted_hand = *hand;
-        sorted_hand.sort_unstable_by_key(|c| Reverse(*c));
-
-        let by_suit = group_by_suit(&sorted_hand);
-        let cardinalities = Cardinalities::new(&sorted_hand);
+        let by_suit = group_by_suit(hand);
+        let cardinalities = Cardinalities::new(hand);
 
         match_straight_flush(&by_suit)
             .or_else(|| match_four_of_a_kind(&cardinalities))
             .or_else(|| match_full_house(&cardinalities))
             .or_else(|| match_flush(&by_suit))
-            .or_else(|| match_straight(&sorted_hand))
+            .or_else(|| match_straight(hand))
             .or_else(|| match_trips(&cardinalities))
             .or_else(|| match_two_pair(&cardinalities))
             .or_else(|| match_pair(&cardinalities))
@@ -331,11 +321,15 @@ impl HandEvaluation {
 
 #[cfg(test)]
 mod tests {
-    use crate::{cards::hand::*, parallelism::algorithms::divide_and_conquer};
+    use crate::cards::hand::*;
+
+    fn test_eval(arr: [Card; 7]) -> HandEvaluation {
+        HandEvaluation::evaluate(&Hand::new(&arr))
+    }
 
     #[test]
     fn test_evaluate_hand_straight_flush_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_SPADE,
             Card::NINE_SPADE,
             Card::SEVEN_SPADE,
@@ -355,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_flush_six_matching() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_SPADE,
             Card::NINE_SPADE,
             Card::SEVEN_SPADE,
@@ -375,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_flush_seven_matching() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_SPADE,
             Card::NINE_SPADE,
             Card::SEVEN_SPADE,
@@ -395,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_flush_hearts() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_HEART,
             Card::NINE_HEART,
             Card::SEVEN_HEART,
@@ -415,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_flush_beats_trips() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_SPADE,
             Card::NINE_SPADE,
             Card::SEVEN_SPADE,
@@ -435,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_flush_a2345() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::ACE_SPADE,
             Card::TWO_SPADE,
             Card::THREE_SPADE,
@@ -455,7 +449,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_four_of_a_kind_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::TEN_HEART,
             Card::TEN_SPADE,
             Card::SEVEN_HEART,
@@ -476,7 +470,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_four_of_a_kind_with_pair_and_higher_kicker() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::TEN_HEART,
             Card::TEN_SPADE,
             Card::TEN_CLUB,
@@ -497,7 +491,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_four_of_a_kind_with_pair_and_lower_kicker() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::TEN_HEART,
             Card::TEN_SPADE,
             Card::TEN_CLUB,
@@ -518,7 +512,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_four_of_a_kind_with_pair_and_trips() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::TEN_HEART,
             Card::TEN_SPADE,
             Card::TEN_CLUB,
@@ -539,7 +533,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_boat_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::TEN_HEART,
             Card::TEN_SPADE,
             Card::TEN_CLUB,
@@ -560,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_boat_two_pairs() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::TEN_HEART,
             Card::TEN_SPADE,
             Card::TEN_CLUB,
@@ -581,7 +575,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_boat_two_trips() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::TEN_HEART,
             Card::TEN_SPADE,
             Card::TEN_CLUB,
@@ -602,7 +596,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_flush_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::KING_CLUB,
@@ -622,7 +616,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_flush_six_matching() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::KING_CLUB,
@@ -642,7 +636,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_flush_seven_matching() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::KING_CLUB,
@@ -662,7 +656,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_flush_beats_straight() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::KING_CLUB,
@@ -682,7 +676,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_flush_beats_trips() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::KING_CLUB,
@@ -702,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_flush_beats_two_pair() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::KING_CLUB,
@@ -722,7 +716,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::SEVEN_DIAMOND,
@@ -742,7 +736,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_six() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::SEVEN_DIAMOND,
@@ -762,7 +756,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_seven() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::SEVEN_DIAMOND,
@@ -782,7 +776,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_beats_trips() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::SEVEN_DIAMOND,
@@ -802,7 +796,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_beats_two_pair() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::NINE_CLUB,
             Card::SEVEN_DIAMOND,
@@ -822,7 +816,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_straight_a2345() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::ACE_SPADE,
             Card::TWO_HEART,
             Card::THREE_CLUB,
@@ -842,7 +836,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_trips_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::EIGHT_SPADE,
             Card::SEVEN_DIAMOND,
@@ -863,7 +857,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_two_pair_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::EIGHT_SPADE,
             Card::JACK_DIAMOND,
@@ -885,7 +879,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_two_pair_three_pairs_higher_kicker() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::EIGHT_SPADE,
             Card::JACK_DIAMOND,
@@ -907,7 +901,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_two_pair_three_pairs_lower_kicker() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::EIGHT_SPADE,
             Card::JACK_DIAMOND,
@@ -929,7 +923,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_two_pair_all_kickers_lower() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::EIGHT_CLUB,
             Card::EIGHT_SPADE,
             Card::JACK_DIAMOND,
@@ -951,7 +945,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_two_pair_not_pocket_pair() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::JACK_CLUB,
             Card::EIGHT_SPADE,
             Card::JACK_DIAMOND,
@@ -973,7 +967,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_pair_normal() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::JACK_CLUB,
             Card::EIGHT_SPADE,
             Card::JACK_DIAMOND,
@@ -994,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_pair_higher_kickers() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::FIVE_CLUB,
             Card::EIGHT_SPADE,
             Card::FIVE_DIAMOND,
@@ -1015,7 +1009,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_pair_lower_kickers() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::ACE_CLUB,
             Card::ACE_SPADE,
             Card::QUEEN_CLUB,
@@ -1036,7 +1030,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_high_card() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::KING_CLUB,
             Card::QUEEN_CLUB,
             Card::JACK_DIAMOND,
@@ -1057,7 +1051,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_high_card_one_card_from_pocket() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::KING_CLUB,
             Card::TWO_CLUB,
             Card::JACK_DIAMOND,
@@ -1078,7 +1072,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_hand_high_card_nothing_from_pocket() {
-        let hand = HandEvaluation::evaluate(&[
+        let hand = test_eval([
             Card::THREE_CLUB,
             Card::TWO_CLUB,
             Card::JACK_DIAMOND,

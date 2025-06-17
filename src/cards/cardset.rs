@@ -1,5 +1,6 @@
 use crate::cards::card::{ALL_CARDS, Card, Rank, Suit, card_index};
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct CardSet {
     bitset: u64,
 }
@@ -17,7 +18,7 @@ impl CardSet {
         self.bitset & ((1 as u64) << card_index(card)) != 0
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Card> {
+    pub fn iter_desc(&self) -> impl Iterator<Item = Card> {
         CardSetIterator {
             bitset: self.bitset,
             shifted: 0,
@@ -56,14 +57,14 @@ impl Iterator for CardSetIterator {
             return None;
         }
 
-        while self.bitset & 1 == 0 {
-            self.bitset >>= 1;
+        while self.bitset & ((1 as u64) << 63) == 0 {
+            self.bitset <<= 1;
             self.shifted += 1;
         }
 
-        let card = ALL_CARDS[self.shifted];
+        let card = ALL_CARDS[63 - self.shifted];
 
-        self.bitset >>= 1;
+        self.bitset <<= 1;
         self.shifted += 1;
 
         Some(card)
@@ -122,16 +123,25 @@ mod tests {
     }
 
     #[test]
-    fn test_card_set_iter() {
+    fn test_card_set_iter_desc() {
         let set = vec![Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]
             .into_iter()
             .collect::<CardSet>();
 
-        let iterated = set.iter().collect::<Vec<Card>>();
+        let iterated = set.iter_desc().collect::<Vec<Card>>();
 
         assert_eq!(
             iterated,
-            [Card::SIX_HEART, Card::NINE_HEART, Card::ACE_SPADE]
+            [Card::ACE_SPADE, Card::NINE_HEART, Card::SIX_HEART]
         );
+    }
+
+    #[test]
+    fn test_card_set_iter_desc_full() {
+        let set = ALL_CARDS.into_iter().collect::<CardSet>();
+
+        let iterated = set.iter_desc().collect::<Vec<Card>>();
+
+        assert_eq!(iterated, ALL_CARDS.into_iter().rev().collect::<Vec<Card>>());
     }
 }
