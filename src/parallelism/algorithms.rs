@@ -6,18 +6,7 @@ use std::{
     thread::{self, available_parallelism},
 };
 
-fn get_parallelism_from_os() -> NonZero<usize> {
-    match available_parallelism() {
-        Ok(val) => val,
-        Err(e) => {
-            warn!(
-                "Unable to determine the number of CPU's in the system. Disabling parallelism. Reason: {}",
-                e
-            );
-            NonZero::new(1).unwrap()
-        }
-    }
-}
+use crate::parallelism::os::get_parallelism_from_os;
 
 fn divide_and_conquer_with_parallelism<
     R: Send,
@@ -40,6 +29,8 @@ fn divide_and_conquer_with_parallelism<
 
     thread::scope(|s| {
         let mut threads = Vec::new();
+        threads.reserve_exact(parallelism.get());
+
         let mut last = range.start;
 
         for _ in 0..parallelism.get() {
@@ -67,6 +58,32 @@ pub fn divide_and_conquer<R: Send, F: Fn(Range<usize>) -> R + Send + Sync>(
     func: F,
 ) -> Vec<R> {
     divide_and_conquer_with_parallelism(range, func, get_parallelism_from_os)
+}
+
+pub fn map_reduce<A, B, M, T, R>(elems: &[A], mapper: M, seed: T, mut reducer: R) -> T
+where
+    A: Sync,
+    B: Send,
+    M: Fn(&A) -> B + Send + Sync,
+    R: FnMut(T, Vec<B>) -> T,
+{
+    let func = |range: Range<usize>| {
+        let mut ret = Vec::new();
+        ret.reserve_exact(range.len());
+
+        for i in range {
+            ret.push(mapper(&elems[i]));
+        }
+
+        ret
+    };
+
+    let chunks = divide_and_conquer(0..elems.len(), func);
+    let mut accumulator = seed;
+    for chunk in chunks {
+        accumulator = reducer(accumulator, chunk);
+    }
+    accumulator
 }
 
 #[cfg(test)]
@@ -139,5 +156,18 @@ mod tests {
         results.sort_by_key(|r| r.start);
 
         assert_eq!(results, vec![0..34, 34..68, 68..101]);
+    }
+
+    #[test]
+    fn test_map_reduce() {
+        let range = (0..100).into_iter().collect::<Vec<i32>>();
+        let sum_of_squares = map_reduce(
+            range.as_slice(),
+            |x| x * x,
+            0,
+            |a, b| a + b.iter().sum::<i32>(),
+        );
+
+        assert_eq!(sum_of_squares, 328_350);
     }
 }

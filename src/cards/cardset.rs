@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
 use crate::{
-    cards::card::{ALL_CARDS, Card, Rank, Suit, card_index},
+    cards::card::{ALL_CARDS, Card, card_index},
     util::ui::format_comma_separated_values,
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct CardSet {
     bitset: u64,
 }
@@ -15,8 +15,18 @@ impl CardSet {
         Self { bitset: 0 }
     }
 
+    pub fn universe() -> Self {
+        Self {
+            bitset: 0x1FFFFFFFFFFFFF,
+        }
+    }
+
     pub fn add(&mut self, card: Card) {
         self.bitset |= (1 as u64) << card_index(card);
+    }
+
+    pub fn add_all(&mut self, other: CardSet) {
+        self.bitset |= other.bitset
     }
 
     pub fn has(&self, card: Card) -> bool {
@@ -25,8 +35,8 @@ impl CardSet {
 
     pub fn iter_desc(&self) -> impl Iterator<Item = Card> {
         CardSetIterator {
-            bitset: self.bitset,
-            shifted: 0,
+            bitset: self.bitset << (64 - 52),
+            shifted: 64 - 52,
         }
     }
 
@@ -37,6 +47,10 @@ impl CardSet {
     pub fn remove(&mut self, card: Card) {
         self.bitset &= !((1 as u64) << card_index(card));
     }
+
+    pub fn remove_all(&mut self, other: CardSet) {
+        self.bitset &= !other.bitset
+    }
 }
 
 impl FromIterator<Card> for CardSet {
@@ -46,6 +60,18 @@ impl FromIterator<Card> for CardSet {
             set.add(card);
         }
         set
+    }
+}
+
+impl<const LENGTH: usize> From<&[Card; LENGTH]> for CardSet {
+    fn from(value: &[Card; LENGTH]) -> Self {
+        value.into_iter().map(|c| *c).collect::<CardSet>()
+    }
+}
+
+impl From<&[Card]> for CardSet {
+    fn from(value: &[Card]) -> Self {
+        value.into_iter().map(|c| *c).collect::<CardSet>()
     }
 }
 
@@ -156,5 +182,56 @@ mod tests {
         let iterated = set.iter_desc().collect::<Vec<Card>>();
 
         assert_eq!(iterated, ALL_CARDS.into_iter().rev().collect::<Vec<Card>>());
+    }
+
+    #[test]
+    fn test_card_set_add_all() {
+        let mut set = vec![Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]
+            .into_iter()
+            .collect::<CardSet>();
+
+        let other = vec![
+            Card::ACE_SPADE,
+            Card::KING_SPADE,
+            Card::QUEEN_SPADE,
+            Card::NINE_HEART,
+        ]
+        .into_iter()
+        .collect::<CardSet>();
+
+        set.add_all(other);
+
+        let contents = set.iter_desc().collect::<Vec<Card>>();
+        assert_eq!(
+            contents,
+            vec![
+                Card::ACE_SPADE,
+                Card::KING_SPADE,
+                Card::QUEEN_SPADE,
+                Card::NINE_HEART,
+                Card::SIX_HEART
+            ]
+        );
+    }
+
+    #[test]
+    fn test_card_set_remove_all() {
+        let mut set = vec![Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]
+            .into_iter()
+            .collect::<CardSet>();
+
+        let other = vec![
+            Card::ACE_SPADE,
+            Card::KING_SPADE,
+            Card::QUEEN_SPADE,
+            Card::NINE_HEART,
+        ]
+        .into_iter()
+        .collect::<CardSet>();
+
+        set.remove_all(other);
+
+        let contents = set.iter_desc().collect::<Vec<Card>>();
+        assert_eq!(contents, vec![Card::SIX_HEART]);
     }
 }

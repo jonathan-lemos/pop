@@ -14,7 +14,7 @@ use crate::{
 
 pub const HAND_SIZE: usize = 7;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Hand {
     cardset: CardSet,
 }
