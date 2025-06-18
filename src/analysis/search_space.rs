@@ -25,6 +25,136 @@ struct MutPtr<T> {
 unsafe impl<T> Send for MutPtr<T> {}
 unsafe impl<T> Sync for MutPtr<T> {}
 
+unsafe fn parallel_combinations_of_slice_of_len_1(
+    slice: &[Card],
+    current: CardSet,
+    output: MutPtr<CardSet>,
+) {
+    let mut ptr = output.ptr;
+    let mut set = current;
+
+    for x1 in 0..slice.len() {
+        set.add(slice[x1]);
+        unsafe {
+            *ptr = set;
+            ptr = ptr.add(1);
+        }
+        set.remove(slice[x1]);
+    }
+}
+
+unsafe fn parallel_combinations_of_slice_of_len_2(
+    slice: &[Card],
+    current: CardSet,
+    output: MutPtr<CardSet>,
+) {
+    let mut ptr = output.ptr;
+    let mut set = current;
+
+    for x1 in 0..slice.len() {
+        set.add(slice[x1]);
+        for x2 in x1 + 1..slice.len() {
+            set.add(slice[x2]);
+            unsafe {
+                *ptr = set;
+                ptr = ptr.add(1);
+            }
+            set.remove(slice[x2]);
+        }
+        set.remove(slice[x1]);
+    }
+}
+
+unsafe fn parallel_combinations_of_slice_of_len_3(
+    slice: &[Card],
+    current: CardSet,
+    output: MutPtr<CardSet>,
+) {
+    let mut ptr = output.ptr;
+    let mut set = current;
+
+    for x1 in 0..slice.len() {
+        set.add(slice[x1]);
+        for x2 in x1 + 1..slice.len() {
+            set.add(slice[x2]);
+            for x3 in x2 + 1..slice.len() {
+                set.add(slice[x3]);
+                unsafe {
+                    *ptr = set;
+                    ptr = ptr.add(1);
+                }
+                set.remove(slice[x3]);
+            }
+            set.remove(slice[x2]);
+        }
+        set.remove(slice[x1]);
+    }
+}
+
+unsafe fn parallel_combinations_of_slice_of_len_4(
+    slice: &[Card],
+    current: CardSet,
+    output: MutPtr<CardSet>,
+) {
+    let mut ptr = output.ptr;
+    let mut set = current;
+
+    for x1 in 0..slice.len() {
+        set.add(slice[x1]);
+        for x2 in x1 + 1..slice.len() {
+            set.add(slice[x2]);
+            for x3 in x2 + 1..slice.len() {
+                set.add(slice[x3]);
+                for x4 in x3 + 1..slice.len() {
+                    set.add(slice[x4]);
+                    unsafe {
+                        *ptr = set;
+                        ptr = ptr.add(1);
+                    }
+                    set.remove(slice[x4]);
+                }
+                set.remove(slice[x3]);
+            }
+            set.remove(slice[x2]);
+        }
+        set.remove(slice[x1]);
+    }
+}
+
+unsafe fn parallel_combinations_of_slice_of_len_5(
+    slice: &[Card],
+    current: CardSet,
+    output: MutPtr<CardSet>,
+) {
+    let mut ptr = output.ptr;
+    let mut set = current;
+
+    for x1 in 0..slice.len() {
+        set.add(slice[x1]);
+        for x2 in x1 + 1..slice.len() {
+            set.add(slice[x2]);
+            for x3 in x2 + 1..slice.len() {
+                set.add(slice[x3]);
+                for x4 in x3 + 1..slice.len() {
+                    set.add(slice[x4]);
+                    for x5 in x4 + 1..slice.len() {
+                        set.add(slice[x5]);
+                        unsafe {
+                            *ptr = set;
+                            ptr = ptr.add(1);
+                        }
+                        set.remove(slice[x5]);
+                    }
+                    set.remove(slice[x4]);
+                }
+                set.remove(slice[x3]);
+            }
+            set.remove(slice[x2]);
+        }
+        set.remove(slice[x1]);
+    }
+}
+
 unsafe fn parallel_combinations_of_slice<'scope, 'env>(
     slice: &'env [Card],
     current: CardSet,
@@ -33,10 +163,33 @@ unsafe fn parallel_combinations_of_slice<'scope, 'env>(
     thread_scope: &'scope thread::Scope<'scope, 'env>,
     output: MutPtr<CardSet>,
 ) {
-    if needed == 0 {
-        unsafe { *output.ptr = current };
-        return;
-    }
+    match needed {
+        0 => {
+            unsafe { *output.ptr = current };
+            return;
+        }
+        1 => {
+            unsafe { parallel_combinations_of_slice_of_len_1(slice, current, output) };
+            return;
+        }
+        2 => {
+            unsafe { parallel_combinations_of_slice_of_len_2(slice, current, output) };
+            return;
+        }
+        3 => {
+            unsafe { parallel_combinations_of_slice_of_len_3(slice, current, output) };
+            return;
+        }
+        4 => {
+            unsafe { parallel_combinations_of_slice_of_len_4(slice, current, output) };
+            return;
+        }
+        5 => {
+            unsafe { parallel_combinations_of_slice_of_len_5(slice, current, output) };
+            return;
+        }
+        _ => {}
+    };
 
     let mut current_ptr = output.ptr;
 

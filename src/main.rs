@@ -8,5 +8,5 @@ mod test_util;
 mod util;
 
 fn main() {
-    all_seven_card_hands_legacy();
+    all_seven_card_hands();
 }
