@@ -88,7 +88,8 @@ impl Add<HandDistribution> for HandDistribution {
 mod tests {
     use super::*;
     use crate::{
-        analysis::search_space::all_seven_card_hands, cards::card::Card,
+        analysis::search_space::{all_seven_card_hands, all_seven_card_hands_legacy},
+        cards::card::Card,
         parallelism::algorithms::divide_and_conquer,
     };
 
@@ -212,7 +213,7 @@ mod tests {
     #[test]
     #[ignore = "This test is computationally intensive. Run it with `cargo test -- --include-ignored`"]
     fn test_all_cards_distribution() {
-        let hands = all_seven_card_hands();
+        let hands = all_seven_card_hands_legacy();
 
         let count_hand_types = |range| HandDistribution::evaluate(&hands.as_slice()[range]);
 

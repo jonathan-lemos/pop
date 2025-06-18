@@ -1,32 +1,17 @@
-use std::collections::HashMap;
-
-fn n_choose_r_memoized(n: usize, r: usize, mut memo: &mut HashMap<(usize, usize), usize>) -> usize {
-    match memo.get(&(n, r)) {
-        Some(v) => return *v,
-        None => {}
-    };
-
-    // No ways to chose 4 elements from a set of 3.
+pub fn n_choose_r(n: usize, r: usize) -> usize {
+    if n == 0 {
+        return 1;
+    }
     if n < r {
         return 0;
     }
-    // One way to choose 0 elements. The empty set.
     if r == 0 {
         return 1;
     }
-    // 3 ways to pick 1 element out of a set of 3.
-    if r == 1 {
-        return n;
-    }
 
-    let value =
-        n_choose_r_memoized(n - 1, r, &mut memo) + n_choose_r_memoized(n - 1, r - 1, &mut memo);
-    memo.insert((n, r), value);
-    value
-}
-
-pub fn n_choose_r(n: usize, r: usize) -> usize {
-    n_choose_r_memoized(n, r, &mut HashMap::new())
+    let numerator: usize = ((n - r + 1)..=n).product();
+    let denominator: usize = (1..=r).product();
+    numerator / denominator
 }
 
 #[cfg(test)]

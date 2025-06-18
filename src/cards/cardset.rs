@@ -17,7 +17,7 @@ impl CardSet {
 
     pub fn universe() -> Self {
         Self {
-            bitset: 0x1FFFFFFFFFFFFF,
+            bitset: 0x0FFFFFFFFFFFFF,
         }
     }
 

@@ -97,7 +97,22 @@ pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
     ret
 }
 
-pub fn all_seven_card_hands() -> Vec<Hand> {
+pub fn legacy() -> Vec<CardSet> {
+    let mut ret = Vec::new();
+
+    for x1 in 0..ALL_CARDS.len() {
+        for x2 in x1 + 1..ALL_CARDS.len() {
+            let mut cs = CardSet::new();
+            cs.add(ALL_CARDS[x1]);
+            cs.add(ALL_CARDS[x2]);
+            ret.push(cs);
+        }
+    }
+
+    ret
+}
+
+pub fn all_seven_card_hands_legacy() -> Vec<Hand> {
     let cs = ALL_CARDS;
     let mut ret = Vec::new();
 
@@ -122,14 +137,22 @@ pub fn all_seven_card_hands() -> Vec<Hand> {
     ret
 }
 
+pub fn all_seven_card_hands() -> Vec<Hand> {
+    combinations(CardSet::universe(), 7)
+        .into_iter()
+        .map(|x| unsafe { Hand::from_cardset(x) })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
-    fn debug_print(sets: &Vec<Vec<Card>>) {
+    fn debug_print(sets: &Vec<CardSet>) {
         for (i, set) in sets.iter().enumerate() {
-            let cardset = set.iter().map(|x| *x).collect::<CardSet>();
-            println!("{}: {}", i, cardset);
+            println!("{}: {}", i, set);
         }
     }
 
@@ -200,4 +223,25 @@ mod tests {
         let actual = combinations(set, 3);
         assert_eq!(actual, expected);
     }
+
+    /*
+    #[test]
+    fn test_same() {
+        let expected = legacy();
+        let actual = combinations(CardSet::universe(), 2);
+
+        println!("expected:");
+        debug_print(&expected);
+        println!("actual:");
+        debug_print(&actual);
+
+        let eset = expected.iter().map(|x| *x).collect::<HashSet<CardSet>>();
+        let aset = actual.iter().map(|x| *x).collect::<HashSet<CardSet>>();
+
+        println!("difference:");
+        debug_print(&eset.difference(&aset).map(|x| *x).collect::<Vec<CardSet>>());
+
+        assert_eq!(eset, aset);
+    }
+    */
 }

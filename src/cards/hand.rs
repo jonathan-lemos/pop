@@ -26,6 +26,10 @@ impl Hand {
         Self { cardset }
     }
 
+    pub unsafe fn from_cardset(cardset: CardSet) -> Self {
+        Self { cardset }
+    }
+
     pub fn iter_desc(&self) -> impl Iterator<Item = Card> {
         self.cardset.iter_desc()
     }
