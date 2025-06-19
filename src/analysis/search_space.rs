@@ -2,8 +2,11 @@ use std::{
     collections::HashMap,
     mem::MaybeUninit,
     ops::Range,
+    sync::atomic::{AtomicUsize, Ordering},
     thread::{self},
 };
+
+use crossbeam_channel::{Receiver, Sender};
 
 use crate::{
     analysis::math::n_choose_r,
@@ -18,6 +21,7 @@ use crate::{
     },
 };
 
+#[derive(Clone, Copy)]
 struct MutPtr<T> {
     pub ptr: *mut T,
 }
@@ -29,6 +33,7 @@ unsafe fn parallel_combinations_of_slice_of_len_1(
     slice: &[Card],
     current: CardSet,
     output: MutPtr<CardSet>,
+    amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
     let mut set = current;
@@ -41,12 +46,15 @@ unsafe fn parallel_combinations_of_slice_of_len_1(
         }
         set.remove(slice[x1]);
     }
+
+    amount_done.fetch_add(n_choose_r(slice.len(), 1), Ordering::Release);
 }
 
 unsafe fn parallel_combinations_of_slice_of_len_2(
     slice: &[Card],
     current: CardSet,
     output: MutPtr<CardSet>,
+    amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
     let mut set = current;
@@ -63,12 +71,15 @@ unsafe fn parallel_combinations_of_slice_of_len_2(
         }
         set.remove(slice[x1]);
     }
+
+    amount_done.fetch_add(n_choose_r(slice.len(), 2), Ordering::Release);
 }
 
 unsafe fn parallel_combinations_of_slice_of_len_3(
     slice: &[Card],
     current: CardSet,
     output: MutPtr<CardSet>,
+    amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
     let mut set = current;
@@ -89,12 +100,15 @@ unsafe fn parallel_combinations_of_slice_of_len_3(
         }
         set.remove(slice[x1]);
     }
+
+    amount_done.fetch_add(n_choose_r(slice.len(), 3), Ordering::Release);
 }
 
 unsafe fn parallel_combinations_of_slice_of_len_4(
     slice: &[Card],
     current: CardSet,
     output: MutPtr<CardSet>,
+    amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
     let mut set = current;
@@ -119,12 +133,15 @@ unsafe fn parallel_combinations_of_slice_of_len_4(
         }
         set.remove(slice[x1]);
     }
+
+    amount_done.fetch_add(n_choose_r(slice.len(), 4), Ordering::Release);
 }
 
 unsafe fn parallel_combinations_of_slice_of_len_5(
     slice: &[Card],
     current: CardSet,
     output: MutPtr<CardSet>,
+    amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
     let mut set = current;
@@ -153,39 +170,44 @@ unsafe fn parallel_combinations_of_slice_of_len_5(
         }
         set.remove(slice[x1]);
     }
+
+    amount_done.fetch_add(n_choose_r(slice.len(), 5), Ordering::Release);
 }
 
-unsafe fn parallel_combinations_of_slice<'scope, 'env>(
-    slice: &'env [Card],
-    current: CardSet,
-    needed: usize,
-    concurrency_limiter: &'env ConcurrencyLimiter,
-    thread_scope: &'scope thread::Scope<'scope, 'env>,
-    output: MutPtr<CardSet>,
+unsafe fn parallel_combinations_of_slice<'a>(
+    sender: &Sender<Option<ParallelCombinationsWorkItem<'a>>>,
+    amount_done: &AtomicUsize,
+    work_item: ParallelCombinationsWorkItem<'a>,
 ) {
-    match needed {
+    let slice = work_item.slice;
+    let current = work_item.current;
+    let needed = work_item.needed;
+    let output = work_item.output;
+
+    match work_item.needed {
         0 => {
             unsafe { *output.ptr = current };
+            amount_done.fetch_add(1, Ordering::Release);
             return;
         }
         1 => {
-            unsafe { parallel_combinations_of_slice_of_len_1(slice, current, output) };
+            unsafe { parallel_combinations_of_slice_of_len_1(slice, current, output, amount_done) };
             return;
         }
         2 => {
-            unsafe { parallel_combinations_of_slice_of_len_2(slice, current, output) };
+            unsafe { parallel_combinations_of_slice_of_len_2(slice, current, output, amount_done) };
             return;
         }
         3 => {
-            unsafe { parallel_combinations_of_slice_of_len_3(slice, current, output) };
+            unsafe { parallel_combinations_of_slice_of_len_3(slice, current, output, amount_done) };
             return;
         }
         4 => {
-            unsafe { parallel_combinations_of_slice_of_len_4(slice, current, output) };
+            unsafe { parallel_combinations_of_slice_of_len_4(slice, current, output, amount_done) };
             return;
         }
         5 => {
-            unsafe { parallel_combinations_of_slice_of_len_5(slice, current, output) };
+            unsafe { parallel_combinations_of_slice_of_len_5(slice, current, output, amount_done) };
             return;
         }
         _ => {}
@@ -202,21 +224,25 @@ unsafe fn parallel_combinations_of_slice<'scope, 'env>(
         let mut new_current = current;
         new_current.add(slice[i]);
 
-        concurrency_limiter.run_scoped(thread_scope, move || unsafe {
-            new_current.add(slice[i]);
-
-            parallel_combinations_of_slice(
-                &slice[i + 1..],
-                new_current,
-                needed - 1,
-                concurrency_limiter,
-                thread_scope,
-                current_mut_ptr,
-            )
-        });
+        sender
+            .send(Some(ParallelCombinationsWorkItem {
+                slice: &slice[i + 1..],
+                current: new_current,
+                needed: needed - 1,
+                output: current_mut_ptr,
+            }))
+            .unwrap();
 
         current_ptr = unsafe { current_ptr.add(amount) };
     }
+}
+
+#[derive(Clone, Copy)]
+struct ParallelCombinationsWorkItem<'a> {
+    pub slice: &'a [Card],
+    pub current: CardSet,
+    pub needed: usize,
+    pub output: MutPtr<CardSet>,
 }
 
 pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
@@ -229,20 +255,36 @@ pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
     ret.reserve_exact(amount);
 
     let cards = pool.iter_desc().collect::<Vec<Card>>();
-    let concurrency_limiter = ConcurrencyLimiter::new(get_parallelism_from_os().get() - 1);
-    let mut_ptr = MutPtr {
-        ptr: ret.as_mut_ptr(),
-    };
+
+    let (sender, receiver) = crossbeam_channel::unbounded::<Option<ParallelCombinationsWorkItem>>();
+    sender
+        .send(Some(ParallelCombinationsWorkItem {
+            slice: cards.as_slice(),
+            current: CardSet::new(),
+            needed: size,
+            output: MutPtr {
+                ptr: ret.as_mut_ptr(),
+            },
+        }))
+        .unwrap();
+
+    let amount_done = AtomicUsize::new(0);
+
+    let n_threads = get_parallelism_from_os().get();
 
     thread::scope(|s| unsafe {
-        parallel_combinations_of_slice(
-            cards.as_slice(),
-            CardSet::new(),
-            size,
-            &concurrency_limiter,
-            s,
-            mut_ptr,
-        );
+        for _ in 0..n_threads {
+            s.spawn(|| {
+                while let Some(work_item) = receiver.recv().unwrap() {
+                    parallel_combinations_of_slice(&sender, &amount_done, work_item);
+                    if amount_done.load(Ordering::Acquire) == amount {
+                        for _ in 0..n_threads {
+                            sender.send(None).unwrap();
+                        }
+                    }
+                }
+            });
+        }
     });
 
     unsafe { ret.set_len(amount) };
