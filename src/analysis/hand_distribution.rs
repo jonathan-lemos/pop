@@ -1,6 +1,9 @@
 use std::ops::Add;
 
-use crate::cards::hand::{Hand, HandEvaluation};
+use crate::{
+    cards::hand::{Hand, HandEvaluation},
+    parallelism::algorithms::{into_parallel_reduce, parallel_map},
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct HandDistribution {
@@ -31,37 +34,43 @@ impl HandDistribution {
     }
 
     pub fn evaluate(hands: &[Hand]) -> Self {
-        let mut dist = Self::new();
-
-        for hand in hands {
-            match HandEvaluation::evaluate(hand) {
-                HandEvaluation::StraightFlush { highest_rank: _ } => dist.straight_flushes += 1,
-                HandEvaluation::FourOfAKind { rank: _, kicker: _ } => dist.four_of_a_kinds += 1,
-                HandEvaluation::FullHouse { triple: _, pair: _ } => dist.full_houses += 1,
-                HandEvaluation::Flush {
-                    ranks_sorted_desc: _,
-                } => dist.flushes += 1,
-                HandEvaluation::Straight { highest_rank: _ } => dist.straights += 1,
-                HandEvaluation::ThreeOfAKind {
-                    rank: _,
-                    kickers_sorted_desc: _,
-                } => dist.three_of_a_kinds += 1,
-                HandEvaluation::TwoPair {
-                    higher_rank: _,
-                    lower_rank: _,
-                    kicker: _,
-                } => dist.two_pairs += 1,
-                HandEvaluation::Pair {
-                    rank: _,
-                    kickers_sorted_desc: _,
-                } => dist.pairs += 1,
-                HandEvaluation::HighCard {
-                    rank: _,
-                    kickers_sorted_desc: _,
-                } => dist.high_cards += 1,
-            }
+        if hands.is_empty() {
+            return HandDistribution::new();
         }
+        let distributions = parallel_map(hands, |h| HandDistribution::from(h));
+        into_parallel_reduce(distributions, |a, b| a + b).unwrap()
+    }
+}
 
+impl From<&Hand> for HandDistribution {
+    fn from(value: &Hand) -> Self {
+        let mut dist = Self::new();
+        match HandEvaluation::evaluate(value) {
+            HandEvaluation::StraightFlush { highest_rank: _ } => dist.straight_flushes += 1,
+            HandEvaluation::FourOfAKind { rank: _, kicker: _ } => dist.four_of_a_kinds += 1,
+            HandEvaluation::FullHouse { triple: _, pair: _ } => dist.full_houses += 1,
+            HandEvaluation::Flush {
+                ranks_sorted_desc: _,
+            } => dist.flushes += 1,
+            HandEvaluation::Straight { highest_rank: _ } => dist.straights += 1,
+            HandEvaluation::ThreeOfAKind {
+                rank: _,
+                kickers_sorted_desc: _,
+            } => dist.three_of_a_kinds += 1,
+            HandEvaluation::TwoPair {
+                higher_rank: _,
+                lower_rank: _,
+                kicker: _,
+            } => dist.two_pairs += 1,
+            HandEvaluation::Pair {
+                rank: _,
+                kickers_sorted_desc: _,
+            } => dist.pairs += 1,
+            HandEvaluation::HighCard {
+                rank: _,
+                kickers_sorted_desc: _,
+            } => dist.high_cards += 1,
+        }
         dist
     }
 }
@@ -87,11 +96,7 @@ impl Add<HandDistribution> for HandDistribution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        analysis::search_space::{all_seven_card_hands, all_seven_card_hands_legacy},
-        cards::card::Card,
-        parallelism::algorithms::divide_and_conquer,
-    };
+    use crate::{analysis::search_space::all_seven_card_hands, cards::card::Card};
 
     #[test]
     fn test_hands_distribution() {
@@ -213,18 +218,11 @@ mod tests {
     #[test]
     #[ignore = "This test is computationally intensive. Run it with `cargo test -- --include-ignored`"]
     fn test_all_cards_distribution() {
-        let hands = all_seven_card_hands_legacy();
-
-        let count_hand_types = |range| HandDistribution::evaluate(&hands.as_slice()[range]);
-
-        let counts = divide_and_conquer(0..hands.len(), count_hand_types)
-            .into_iter()
-            .reduce(|a, b| a + b)
-            .unwrap();
+        let hands = all_seven_card_hands();
 
         // From https://en.wikipedia.org/wiki/Poker_probability#7-card_poker_hands
         assert_eq!(
-            counts,
+            HandDistribution::evaluate(hands.as_slice()),
             HandDistribution {
                 straight_flushes: 41_584,
                 four_of_a_kinds: 224_848,

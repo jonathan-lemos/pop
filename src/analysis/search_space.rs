@@ -1,24 +1,12 @@
-use std::{
-    collections::HashMap,
-    mem::MaybeUninit,
-    ops::Range,
-    sync::atomic::{AtomicUsize, Ordering},
-    thread::{self},
-};
-
-use crossbeam_channel::{Receiver, Sender};
-
 use crate::{
     analysis::math::n_choose_r,
-    cards::{
-        card::{ALL_CARDS, Card},
-        cardset::CardSet,
-        hand::Hand,
-    },
-    parallelism::{
-        algorithms::divide_and_conquer, concurrency_limiter::ConcurrencyLimiter,
-        os::get_parallelism_from_os,
-    },
+    cards::{card::Card, cardset::CardSet, hand::Hand},
+    parallelism::os::get_parallelism_from_os,
+};
+use crossbeam_channel::Sender;
+use std::{
+    sync::atomic::{AtomicUsize, Ordering},
+    thread::{self},
 };
 
 #[derive(Clone, Copy)]
@@ -292,68 +280,16 @@ pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
     ret
 }
 
-pub fn legacy() -> Vec<CardSet> {
-    let mut ret = Vec::new();
-
-    for x1 in 0..ALL_CARDS.len() {
-        for x2 in x1 + 1..ALL_CARDS.len() {
-            let mut cs = CardSet::new();
-            cs.add(ALL_CARDS[x1]);
-            cs.add(ALL_CARDS[x2]);
-            ret.push(cs);
-        }
-    }
-
-    ret
-}
-
-pub fn all_seven_card_hands_legacy() -> Vec<Hand> {
-    let cs = ALL_CARDS;
-    let mut ret = Vec::new();
-
-    for x1 in 0..ALL_CARDS.len() {
-        for x2 in x1 + 1..ALL_CARDS.len() {
-            for x3 in x2 + 1..ALL_CARDS.len() {
-                for x4 in x3 + 1..ALL_CARDS.len() {
-                    for x5 in x4 + 1..ALL_CARDS.len() {
-                        for x6 in x5 + 1..ALL_CARDS.len() {
-                            for x7 in x6 + 1..ALL_CARDS.len() {
-                                ret.push(Hand::new(&[
-                                    cs[x1], cs[x2], cs[x3], cs[x4], cs[x5], cs[x6], cs[x7],
-                                ]))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    ret
-}
-
 pub fn all_seven_card_hands() -> Vec<Hand> {
     combinations(CardSet::universe(), 7)
         .into_iter()
-        .map(|x| unsafe { Hand::from_cardset(x) })
+        .map(|x| unsafe { Hand::from_cardset_unchecked(x) })
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use super::*;
-
-    fn debug_print(sets: &Vec<CardSet>) {
-        for (i, set) in sets.iter().enumerate() {
-            println!("{}: {}", i, set);
-        }
-    }
-
-    fn to_vec(cardset: CardSet) -> Vec<Card> {
-        cardset.iter_desc().collect()
-    }
 
     #[test]
     fn test_combinations_empty() {
@@ -418,25 +354,4 @@ mod tests {
         let actual = combinations(set, 3);
         assert_eq!(actual, expected);
     }
-
-    /*
-    #[test]
-    fn test_same() {
-        let expected = legacy();
-        let actual = combinations(CardSet::universe(), 2);
-
-        println!("expected:");
-        debug_print(&expected);
-        println!("actual:");
-        debug_print(&actual);
-
-        let eset = expected.iter().map(|x| *x).collect::<HashSet<CardSet>>();
-        let aset = actual.iter().map(|x| *x).collect::<HashSet<CardSet>>();
-
-        println!("difference:");
-        debug_print(&eset.difference(&aset).map(|x| *x).collect::<Vec<CardSet>>());
-
-        assert_eq!(eset, aset);
-    }
-    */
 }

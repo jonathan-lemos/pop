@@ -1,4 +1,4 @@
-use crate::analysis::search_space::{all_seven_card_hands, all_seven_card_hands_legacy};
+use crate::analysis::search_space::all_seven_card_hands;
 
 mod analysis;
 mod cards;

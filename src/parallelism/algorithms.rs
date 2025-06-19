@@ -1,89 +1,192 @@
-use log::warn;
-use std::{
-    cmp::min,
-    num::NonZero,
-    ops::Range,
-    thread::{self, available_parallelism},
-};
+use std::{cmp::min, num::NonZero, ops::Range, thread};
 
-use crate::parallelism::os::get_parallelism_from_os;
+use crate::parallelism::{os::get_parallelism_from_os, send_sync_raw_ptr::SendSyncRawPtr};
 
-fn divide_and_conquer_with_parallelism<
-    R: Send,
-    F: Fn(Range<usize>) -> R + Send + Sync,
-    P: FnOnce() -> NonZero<usize>,
->(
-    range: Range<usize>,
-    func: F,
-    get_parallelism: P,
-) -> Vec<R> {
-    let width = match NonZero::new(range.len()) {
-        Some(w) => w,
-        None => return vec![],
+pub struct SubrangeIterator {
+    modulus: usize,
+    step: usize,
+    current: usize,
+    end: usize,
+}
+
+impl Iterator for SubrangeIterator {
+    type Item = Range<usize>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current >= self.end {
+            return None;
+        }
+
+        let this_start = self.current;
+        let this_end = this_start
+            + self.step
+            + if self.modulus > 0 {
+                self.modulus -= 1;
+                1
+            } else {
+                0
+            };
+
+        self.current = this_end;
+
+        Some(this_start..this_end)
+    }
+}
+
+impl SubrangeIterator {
+    pub fn from_range(range: Range<usize>, n_chunks: NonZero<usize>) -> Self {
+        let range_len = match NonZero::new(range.len()) {
+            Some(v) => v,
+            None => {
+                return Self {
+                    modulus: 0,
+                    step: 0,
+                    current: 0,
+                    end: 0,
+                };
+            }
+        };
+
+        let n_chunks = min(range_len, n_chunks);
+        let step = range_len.get() / n_chunks.get();
+        let modulus = range_len.get() % n_chunks.get();
+
+        Self {
+            modulus,
+            step,
+            current: range.start,
+            end: range.end,
+        }
+    }
+}
+
+fn parallel_map_with_parallelism<T: Sync, U: Send, F: Fn(&T) -> U + Send + Sync>(
+    slice: &[T],
+    max_parallelism: NonZero<usize>,
+    mapper: F,
+) -> Vec<U> {
+    let subranges = SubrangeIterator::from_range(0..slice.len(), max_parallelism);
+
+    let mut output = Vec::<U>::new();
+    output.reserve_exact(slice.len());
+    unsafe { output.set_len(slice.len()) };
+
+    let output_ptr = SendSyncRawPtr {
+        ptr: output.as_mut_ptr(),
     };
-
-    let parallelism = min(get_parallelism(), width);
-
-    let step = width.get() / parallelism.get();
-    let mut modulus = width.get() % parallelism.get();
 
     thread::scope(|s| {
         let mut threads = Vec::new();
-        threads.reserve_exact(parallelism.get());
 
-        let mut last = range.start;
-
-        for _ in 0..parallelism.get() {
-            let mut this_width = step;
-            if modulus > 0 {
-                modulus -= 1;
-                this_width += 1;
-            }
-            let this_end = last + this_width;
-
-            let this_range = last..this_end;
-            last = this_end;
-
-            threads.push(s.spawn(|| func(this_range)));
+        for subrange in subranges {
+            threads.push(s.spawn(|| {
+                for i in subrange {
+                    unsafe { (output_ptr + i).set(mapper(&slice[i])) }
+                }
+            }));
         }
+    });
 
-        threads.into_iter().map(|x| x.join().unwrap()).collect()
-    })
+    output
 }
 
-// Divides the given range as evenly as possible into a number of subranges equal to the current
-// machine's CPU's, then runs the given function on each subrange in parallel.
-pub fn divide_and_conquer<R: Send, F: Fn(Range<usize>) -> R + Send + Sync>(
-    range: Range<usize>,
-    func: F,
-) -> Vec<R> {
-    divide_and_conquer_with_parallelism(range, func, get_parallelism_from_os)
-}
+fn into_parallel_map_with_parallelism<T: Sync, U: Send, F: Fn(T) -> U + Send + Sync>(
+    mut vec: Vec<T>,
+    max_parallelism: NonZero<usize>,
+    mapper: F,
+) -> Vec<U> {
+    let subranges = SubrangeIterator::from_range(0..vec.len(), max_parallelism);
 
-pub fn map_reduce<A, B, M, T, R>(elems: &[A], mapper: M, seed: T, mut reducer: R) -> T
-where
-    A: Sync,
-    B: Send,
-    M: Fn(&A) -> B + Send + Sync,
-    R: FnMut(T, Vec<B>) -> T,
-{
-    let func = |range: Range<usize>| {
-        let mut ret = Vec::new();
-        ret.reserve_exact(range.len());
+    let mut output = Vec::<U>::new();
+    output.reserve_exact(vec.len());
+    unsafe { output.set_len(vec.len()) };
 
-        for i in range {
-            ret.push(mapper(&elems[i]));
-        }
-
-        ret
+    let input_ptr = SendSyncRawPtr {
+        ptr: vec.as_mut_ptr(),
     };
 
-    let chunks = divide_and_conquer(0..elems.len(), func);
-    let mut accumulator = seed;
-    for chunk in chunks {
-        accumulator = reducer(accumulator, chunk);
+    let output_ptr = SendSyncRawPtr {
+        ptr: output.as_mut_ptr(),
+    };
+
+    thread::scope(|s| {
+        for subrange in subranges {
+            s.spawn(|| {
+                for i in subrange {
+                    unsafe {
+                        let output = output_ptr + i;
+                        let input = input_ptr + i;
+                        output.set(mapper(input.get()))
+                    }
+                }
+            });
+        }
+    });
+
+    output
+}
+
+fn into_parallel_reduce_with_parallelism<T: Send + Sync, F: Fn(T, T) -> T + Send + Sync>(
+    mut vec: Vec<T>,
+    max_parallelism: NonZero<usize>,
+    reducer: F,
+) -> Option<T> {
+    let subranges = SubrangeIterator::from_range(0..vec.len(), max_parallelism);
+
+    let input_ptr = SendSyncRawPtr {
+        ptr: vec.as_mut_ptr(),
+    };
+
+    let mut values = thread::scope(|s| {
+        let threads = subranges.map(|subrange| {
+            let reducer_ref = &reducer;
+            s.spawn(move || {
+                let mut current = unsafe { (input_ptr + subrange.start).get() };
+                for i in subrange.start + 1..subrange.end {
+                    current = reducer_ref(current, unsafe { (input_ptr + i).get() });
+                }
+                current
+            })
+        });
+
+        threads
+            .into_iter()
+            .map(|t| t.join().unwrap())
+            .collect::<Vec<T>>()
+    });
+
+    if values.is_empty() {
+        return None;
     }
-    accumulator
+    let value_ptr = SendSyncRawPtr {
+        ptr: values.as_mut_ptr(),
+    };
+    let mut current = unsafe { value_ptr.get() };
+    for i in 1..values.len() {
+        current = reducer(current, unsafe { (value_ptr + i).get() });
+    }
+    Some(current)
+}
+
+pub fn parallel_map<T: Sync, U: Send, F: Fn(&T) -> U + Send + Sync>(
+    slice: &[T],
+    mapper: F,
+) -> Vec<U> {
+    parallel_map_with_parallelism(slice, get_parallelism_from_os(), mapper)
+}
+
+pub fn into_parallel_map<T: Sync, U: Send, F: Fn(T) -> U + Send + Sync>(
+    vec: Vec<T>,
+    mapper: F,
+) -> Vec<U> {
+    into_parallel_map_with_parallelism(vec, get_parallelism_from_os(), mapper)
+}
+
+pub fn into_parallel_reduce<T: Send + Sync, F: Fn(T, T) -> T + Send + Sync>(
+    vec: Vec<T>,
+    reducer: F,
+) -> Option<T> {
+    into_parallel_reduce_with_parallelism(vec, get_parallelism_from_os(), reducer)
 }
 
 #[cfg(test)]
@@ -91,16 +194,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_split_evenly() {
-        let range = 0..1_000_000;
-        let get_parallelism = || NonZero::new(4).unwrap();
-        let func = |r| r;
-
-        let mut results = divide_and_conquer_with_parallelism(range, func, get_parallelism);
-        results.sort_by_key(|r| r.start);
+    fn test_subrangeiterator_no_modulus() {
+        let ranges = SubrangeIterator::from_range(0..1_000_000, NonZero::new(4).unwrap())
+            .collect::<Vec<Range<usize>>>();
 
         assert_eq!(
-            results,
+            ranges,
             vec![
                 0..250_000,
                 250_000..500_000,
@@ -111,63 +210,99 @@ mod tests {
     }
 
     #[test]
-    fn test_split_less_than_parallelism() {
-        let range = 0..2;
-        let get_parallelism = || NonZero::new(69).unwrap();
-        let func = |r| r;
+    fn test_subrangeiterator_range_smaller_than_chunks() {
+        let ranges = SubrangeIterator::from_range(0..2, NonZero::new(69).unwrap())
+            .collect::<Vec<Range<usize>>>();
 
-        let mut results = divide_and_conquer_with_parallelism(range, func, get_parallelism);
-        results.sort_by_key(|r| r.start);
-
-        assert_eq!(results, vec![0..1, 1..2]);
+        assert_eq!(ranges, vec![0..1, 1..2]);
     }
 
     #[test]
-    fn test_split_equal_to_parallelism() {
-        let range = 0..3;
-        let get_parallelism = || NonZero::new(3).unwrap();
-        let func = |r| r;
+    fn test_subrangeiterator_range_equal_to_parallelism() {
+        let ranges = SubrangeIterator::from_range(0..3, NonZero::new(3).unwrap())
+            .collect::<Vec<Range<usize>>>();
 
-        let mut results = divide_and_conquer_with_parallelism(range, func, get_parallelism);
-        results.sort_by_key(|r| r.start);
-
-        assert_eq!(results, vec![0..1, 1..2, 2..3]);
+        assert_eq!(ranges, vec![0..1, 1..2, 2..3]);
     }
 
     #[test]
-    fn test_split_unevenly_1() {
-        let range = 0..100;
-        let get_parallelism = || NonZero::new(3).unwrap();
-        let func = |r| r;
+    fn test_subrangeiterator_uneven_split_1() {
+        let ranges = SubrangeIterator::from_range(0..100, NonZero::new(3).unwrap())
+            .collect::<Vec<Range<usize>>>();
 
-        let mut results = divide_and_conquer_with_parallelism(range, func, get_parallelism);
-        results.sort_by_key(|r| r.start);
-
-        assert_eq!(results, vec![0..34, 34..67, 67..100]);
+        assert_eq!(ranges, vec![0..34, 34..67, 67..100]);
     }
 
     #[test]
-    fn test_split_unevenly_2() {
-        let range = 0..101;
-        let get_parallelism = || NonZero::new(3).unwrap();
-        let func = |r| r;
+    fn test_subrangeiterator_uneven_split_2() {
+        let ranges = SubrangeIterator::from_range(0..101, NonZero::new(3).unwrap())
+            .collect::<Vec<Range<usize>>>();
 
-        let mut results = divide_and_conquer_with_parallelism(range, func, get_parallelism);
-        results.sort_by_key(|r| r.start);
-
-        assert_eq!(results, vec![0..34, 34..68, 68..101]);
+        assert_eq!(ranges, vec![0..34, 34..68, 68..101]);
     }
 
     #[test]
-    fn test_map_reduce() {
-        let range = (0..100).into_iter().collect::<Vec<i32>>();
-        let sum_of_squares = map_reduce(
-            range.as_slice(),
-            |x| x * x,
-            0,
-            |a, b| a + b.iter().sum::<i32>(),
+    fn test_subrangeiterator_empty_range() {
+        let ranges = SubrangeIterator::from_range(0..0, NonZero::new(3).unwrap())
+            .collect::<Vec<Range<usize>>>();
+
+        assert_eq!(ranges, vec![]);
+    }
+
+    #[test]
+    fn test_subrangeiterator_one_chunk() {
+        let ranges = SubrangeIterator::from_range(0..10, NonZero::new(1).unwrap())
+            .collect::<Vec<Range<usize>>>();
+
+        assert_eq!(ranges, vec![0..10]);
+    }
+
+    #[test]
+    fn test_parallel_map_with_parallelism() {
+        let nums = (0..20).into_iter().collect::<Vec<i32>>();
+
+        let doubled =
+            parallel_map_with_parallelism(nums.as_slice(), NonZero::new(3).unwrap(), |x| x * 2);
+
+        assert_eq!(
+            doubled,
+            vec![
+                0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38
+            ]
         );
+    }
 
-        assert_eq!(sum_of_squares, 328_350);
+    #[test]
+    fn test_into_parallel_map_with_parallelism() {
+        let nums = (0..20).into_iter().collect::<Vec<i32>>();
+
+        let doubled = into_parallel_map_with_parallelism(nums, NonZero::new(3).unwrap(), |x| x * 2);
+
+        assert_eq!(
+            doubled,
+            vec![
+                0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38
+            ]
+        );
+    }
+
+    #[test]
+    fn test_into_parallel_reduce_with_parallelism() {
+        let nums = (0..20).into_iter().collect::<Vec<i32>>();
+
+        let sum =
+            into_parallel_reduce_with_parallelism(nums, NonZero::new(3).unwrap(), |a, b| a + b);
+
+        assert_eq!(sum, Some(190));
+    }
+
+    #[test]
+    fn test_into_parallel_reduce_with_parallelism_empty_seq() {
+        let nums: Vec<i32> = vec![];
+
+        let sum =
+            into_parallel_reduce_with_parallelism(nums, NonZero::new(3).unwrap(), |a, b| a + b);
+
+        assert_eq!(sum, None);
     }
 }

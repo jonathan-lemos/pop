@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    ops::{BitOr, Sub},
+};
 
 use crate::{
     cards::card::{ALL_CARDS, Card, card_index},
@@ -50,6 +53,24 @@ impl CardSet {
 
     pub fn remove_all(&mut self, other: CardSet) {
         self.bitset &= !other.bitset
+    }
+}
+
+impl BitOr<CardSet> for CardSet {
+    type Output = CardSet;
+
+    fn bitor(mut self, rhs: CardSet) -> Self::Output {
+        self.add_all(rhs);
+        self
+    }
+}
+
+impl Sub<CardSet> for CardSet {
+    type Output = CardSet;
+
+    fn sub(mut self, rhs: CardSet) -> Self::Output {
+        self.remove_all(rhs);
+        self
     }
 }
 

@@ -26,7 +26,7 @@ impl Hand {
         Self { cardset }
     }
 
-    pub unsafe fn from_cardset(cardset: CardSet) -> Self {
+    pub unsafe fn from_cardset_unchecked(cardset: CardSet) -> Self {
         Self { cardset }
     }
 
