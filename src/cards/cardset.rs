@@ -98,9 +98,7 @@ impl From<&[Card]> for CardSet {
 
 impl Display for CardSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("{")?;
-        format_comma_separated_values(self.iter_desc(), f, |v, fmt| v.fmt(fmt))?;
-        f.write_str("}")
+        format_comma_separated_values(self.iter_desc(), f, |v, fmt| v.fmt(fmt))
     }
 }
 
