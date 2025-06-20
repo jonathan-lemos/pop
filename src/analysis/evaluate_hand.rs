@@ -1,9 +1,10 @@
 use self::HandEvaluation::*;
 use crate::analysis::rank_counter::RankCounter;
 use crate::analysis::suit_grouping::SuitGrouping;
-use crate::cards::card::{ALL_RANKS, ALL_SUITS, Card, Rank};
+use crate::cards::card::{ALL_RANKS, ALL_SUITS, Rank};
 use crate::cards::cardset::CardSet;
 use crate::datastructures::stack_vec::StackVec;
+use std::cmp::Reverse;
 
 pub const MAX_HAND_SIZE: usize = 7;
 
@@ -11,11 +12,11 @@ pub const MAX_HAND_SIZE: usize = 7;
 pub enum HandEvaluation {
     HighCard {
         rank: Rank,
-        kickers_sorted_desc: StackVec<Rank, 4>,
+        kickers_sorted_desc: [Rank; 4],
     },
     Pair {
         rank: Rank,
-        kickers_sorted_desc: StackVec<Rank, 3>,
+        kickers_sorted_desc: [Rank; 3],
     },
     TwoPair {
         higher_rank: Rank,
@@ -24,7 +25,7 @@ pub enum HandEvaluation {
     },
     ThreeOfAKind {
         rank: Rank,
-        kickers_sorted_desc: StackVec<Rank, 2>,
+        kickers_sorted_desc: [Rank; 2],
     },
     Straight {
         highest_rank: Rank,
@@ -165,6 +166,8 @@ fn match_four_of_a_kind(cardinalities: &Cardinalities) -> Option<HandEvaluation>
 
 fn match_full_house(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
     if cardinalities.trips.len() >= 2 {
+        // If there are two sets of 3, there can't be a pair, since we have a max of 7 cards to
+        // work with.
         Some(FullHouse {
             triple: cardinalities.trips[0],
             pair: cardinalities.trips[1],
@@ -212,9 +215,11 @@ fn match_trips(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
             kickers.push(*kicker);
         }
 
+        kickers.as_mut_slice().sort_unstable_by_key(|r| Reverse(*r));
+
         Some(ThreeOfAKind {
             rank: cardinalities.trips[0],
-            kickers_sorted_desc: StackVec::from([kickers[0], kickers[1]]),
+            kickers_sorted_desc: [kickers[0], kickers[1]],
         })
     }
 }
@@ -231,6 +236,8 @@ fn match_two_pair(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
             kickers.push(cardinalities.kickers[0]);
         }
 
+        kickers.as_mut_slice().sort_unstable_by_key(|r| Reverse(*r));
+
         Some(TwoPair {
             higher_rank: cardinalities.pairs[0],
             lower_rank: cardinalities.pairs[1],
@@ -245,11 +252,11 @@ fn match_pair(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
     } else {
         Some(Pair {
             rank: cardinalities.pairs[0],
-            kickers_sorted_desc: StackVec::from([
+            kickers_sorted_desc: [
                 cardinalities.kickers[0],
                 cardinalities.kickers[1],
                 cardinalities.kickers[2],
-            ]),
+            ],
         })
     }
 }
@@ -257,18 +264,18 @@ fn match_pair(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
 fn match_high_card(cardinalities: &Cardinalities) -> HandEvaluation {
     HighCard {
         rank: cardinalities.kickers[0],
-        kickers_sorted_desc: StackVec::from([
+        kickers_sorted_desc: [
             cardinalities.kickers[1],
             cardinalities.kickers[2],
             cardinalities.kickers[3],
             cardinalities.kickers[4],
-        ]),
+        ],
     }
 }
 
 impl HandEvaluation {
-    pub fn evaluate(hand: CardSet) -> Option<Self> {
-        if hand.len() != 7 {
+    pub fn evaluate_postflop(hand: CardSet) -> Option<Self> {
+        if hand.len() < 5 || hand.len() > 7 {
             return None;
         }
 
@@ -292,9 +299,11 @@ impl HandEvaluation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cards::card::Card;
 
-    fn test_eval(arr: [Card; 7]) -> HandEvaluation {
-        HandEvaluation::evaluate(CardSet::from(&arr)).expect("evaluate() returned None")
+    fn test_eval<const LENGTH: usize>(arr: [Card; LENGTH]) -> HandEvaluation {
+        const { assert!(LENGTH >= 5 && LENGTH <= 7) }
+        HandEvaluation::evaluate_postflop(CardSet::from(&arr)).expect("evaluate() returned None")
     }
 
     #[test]
@@ -820,7 +829,7 @@ mod tests {
             hand,
             ThreeOfAKind {
                 rank: Rank::Eight,
-                kickers_sorted_desc: [Rank::Jack, Rank::Seven].into()
+                kickers_sorted_desc: [Rank::Jack, Rank::Seven]
             }
         );
     }
@@ -951,7 +960,7 @@ mod tests {
             hand,
             Pair {
                 rank: Rank::Jack,
-                kickers_sorted_desc: [Rank::Ace, Rank::Eight, Rank::Five].into(),
+                kickers_sorted_desc: [Rank::Ace, Rank::Eight, Rank::Five],
             }
         );
     }
@@ -972,7 +981,7 @@ mod tests {
             hand,
             Pair {
                 rank: Rank::Five,
-                kickers_sorted_desc: [Rank::Ace, Rank::King, Rank::Queen].into(),
+                kickers_sorted_desc: [Rank::Ace, Rank::King, Rank::Queen],
             }
         );
     }
@@ -993,7 +1002,7 @@ mod tests {
             hand,
             Pair {
                 rank: Rank::Ace,
-                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Ten].into(),
+                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Ten],
             }
         );
     }
@@ -1014,7 +1023,7 @@ mod tests {
             hand,
             HighCard {
                 rank: Rank::King,
-                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Nine, Rank::Eight].into(),
+                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Nine, Rank::Eight],
             }
         );
     }
@@ -1035,7 +1044,7 @@ mod tests {
             hand,
             HighCard {
                 rank: Rank::King,
-                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five].into(),
+                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five],
             }
         );
     }
@@ -1056,7 +1065,7 @@ mod tests {
             hand,
             HighCard {
                 rank: Rank::King,
-                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five].into(),
+                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five],
             }
         );
     }
@@ -1078,11 +1087,11 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Queen].into(),
+            kickers_sorted_desc: [Rank::Ace, Rank::Queen],
         };
         let h2 = ThreeOfAKind {
             rank: Rank::Ace,
-            kickers_sorted_desc: [Rank::King, Rank::Queen].into(),
+            kickers_sorted_desc: [Rank::King, Rank::Queen],
         };
 
         assert!(h1 < h2);
@@ -1092,11 +1101,11 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind_first_kicker() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Ten].into(),
+            kickers_sorted_desc: [Rank::Ace, Rank::Ten],
         };
         let h2 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Queen, Rank::Ten].into(),
+            kickers_sorted_desc: [Rank::Queen, Rank::Ten],
         };
 
         assert!(h1 > h2);
@@ -1106,11 +1115,11 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind_second_kicker() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Jack].into(),
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
         };
         let h2 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Ten].into(),
+            kickers_sorted_desc: [Rank::Ace, Rank::Ten],
         };
 
         assert!(h1 > h2);
@@ -1120,13 +1129,360 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind_equal() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Jack].into(),
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
         };
         let h2 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Jack].into(),
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
         };
 
         assert!(h1 == h2);
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_straight_flush() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::KING_DIAMOND,
+            Card::QUEEN_DIAMOND,
+            Card::TEN_DIAMOND,
+            Card::ACE_DIAMOND,
+        ]);
+
+        assert_eq!(
+            hand,
+            StraightFlush {
+                highest_rank: Rank::Ace
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_quads() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::JACK_CLUB,
+            Card::QUEEN_DIAMOND,
+            Card::JACK_HEART,
+            Card::JACK_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            FourOfAKind {
+                rank: Rank::Jack,
+                kicker: Rank::Queen
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_boat() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::JACK_CLUB,
+            Card::QUEEN_DIAMOND,
+            Card::QUEEN_HEART,
+            Card::JACK_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            FullHouse {
+                triple: Rank::Jack,
+                pair: Rank::Queen
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_flush() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::KING_DIAMOND,
+            Card::TWO_DIAMOND,
+            Card::TEN_DIAMOND,
+            Card::SEVEN_DIAMOND,
+        ]);
+
+        assert_eq!(
+            hand,
+            Flush {
+                ranks_sorted_desc: [Rank::King, Rank::Jack, Rank::Ten, Rank::Seven, Rank::Two]
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_straight() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::KING_CLUB,
+            Card::QUEEN_DIAMOND,
+            Card::TEN_SPADE,
+            Card::ACE_DIAMOND,
+        ]);
+
+        assert_eq!(
+            hand,
+            Straight {
+                highest_rank: Rank::Ace
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_trips() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::JACK_CLUB,
+            Card::SIX_DIAMOND,
+            Card::ACE_HEART,
+            Card::JACK_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            ThreeOfAKind {
+                rank: Rank::Jack,
+                kickers_sorted_desc: [Rank::Ace, Rank::Six],
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_two_pair() {
+        let hand = test_eval([
+            Card::SIX_DIAMOND,
+            Card::SIX_CLUB,
+            Card::SEVEN_DIAMOND,
+            Card::NINE_HEART,
+            Card::NINE_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            TwoPair {
+                higher_rank: Rank::Nine,
+                lower_rank: Rank::Six,
+                kicker: Rank::Seven,
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_pair() {
+        let hand = test_eval([
+            Card::SIX_DIAMOND,
+            Card::SIX_CLUB,
+            Card::TWO_DIAMOND,
+            Card::NINE_HEART,
+            Card::ACE_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            Pair {
+                rank: Rank::Six,
+                kickers_sorted_desc: [Rank::Ace, Rank::Nine, Rank::Two],
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_flop_high_card() {
+        let hand = test_eval([
+            Card::SIX_DIAMOND,
+            Card::TWO_DIAMOND,
+            Card::NINE_HEART,
+            Card::ACE_SPADE,
+            Card::QUEEN_CLUB,
+        ]);
+
+        assert_eq!(
+            hand,
+            HighCard {
+                rank: Rank::Ace,
+                kickers_sorted_desc: [Rank::Queen, Rank::Nine, Rank::Six, Rank::Two],
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_straight_flush() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::KING_DIAMOND,
+            Card::TWO_CLUB,
+            Card::QUEEN_DIAMOND,
+            Card::TEN_DIAMOND,
+            Card::ACE_DIAMOND,
+        ]);
+
+        assert_eq!(
+            hand,
+            StraightFlush {
+                highest_rank: Rank::Ace
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_quads() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::JACK_CLUB,
+            Card::TWO_CLUB,
+            Card::QUEEN_DIAMOND,
+            Card::JACK_HEART,
+            Card::JACK_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            FourOfAKind {
+                rank: Rank::Jack,
+                kicker: Rank::Queen
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_boat() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::JACK_CLUB,
+            Card::TWO_CLUB,
+            Card::QUEEN_DIAMOND,
+            Card::QUEEN_HEART,
+            Card::JACK_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            FullHouse {
+                triple: Rank::Jack,
+                pair: Rank::Queen
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_flush() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::KING_DIAMOND,
+            Card::THREE_CLUB,
+            Card::TWO_DIAMOND,
+            Card::TEN_DIAMOND,
+            Card::SEVEN_DIAMOND,
+        ]);
+
+        assert_eq!(
+            hand,
+            Flush {
+                ranks_sorted_desc: [Rank::King, Rank::Jack, Rank::Ten, Rank::Seven, Rank::Two]
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_straight() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::KING_CLUB,
+            Card::QUEEN_DIAMOND,
+            Card::TEN_SPADE,
+            Card::THREE_CLUB,
+            Card::ACE_DIAMOND,
+        ]);
+
+        assert_eq!(
+            hand,
+            Straight {
+                highest_rank: Rank::Ace
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_trips() {
+        let hand = test_eval([
+            Card::JACK_DIAMOND,
+            Card::JACK_CLUB,
+            Card::TWO_CLUB,
+            Card::SIX_DIAMOND,
+            Card::ACE_HEART,
+            Card::JACK_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            ThreeOfAKind {
+                rank: Rank::Jack,
+                kickers_sorted_desc: [Rank::Ace, Rank::Six],
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_two_pair() {
+        let hand = test_eval([
+            Card::SIX_DIAMOND,
+            Card::SIX_CLUB,
+            Card::TWO_CLUB,
+            Card::SEVEN_DIAMOND,
+            Card::NINE_HEART,
+            Card::NINE_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            TwoPair {
+                higher_rank: Rank::Nine,
+                lower_rank: Rank::Six,
+                kicker: Rank::Seven,
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_pair() {
+        let hand = test_eval([
+            Card::SIX_DIAMOND,
+            Card::SIX_CLUB,
+            Card::THREE_DIAMOND,
+            Card::TWO_DIAMOND,
+            Card::NINE_HEART,
+            Card::ACE_SPADE,
+        ]);
+
+        assert_eq!(
+            hand,
+            Pair {
+                rank: Rank::Six,
+                kickers_sorted_desc: [Rank::Ace, Rank::Nine, Rank::Three],
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_hand_turn_high_card() {
+        let hand = test_eval([
+            Card::SIX_DIAMOND,
+            Card::TWO_DIAMOND,
+            Card::THREE_DIAMOND,
+            Card::NINE_HEART,
+            Card::ACE_SPADE,
+            Card::QUEEN_CLUB,
+        ]);
+
+        assert_eq!(
+            hand,
+            HighCard {
+                rank: Rank::Ace,
+                kickers_sorted_desc: [Rank::Queen, Rank::Nine, Rank::Six, Rank::Three],
+            }
+        );
     }
 }

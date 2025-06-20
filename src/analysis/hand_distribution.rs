@@ -50,7 +50,7 @@ impl HandDistribution {
 impl From<CardSet> for HandDistribution {
     fn from(value: CardSet) -> Self {
         let mut dist = Self::new();
-        match HandEvaluation::evaluate(value) {
+        match HandEvaluation::evaluate_postflop(value) {
             None => dist.discarded_hands += 1,
             Some(HandEvaluation::StraightFlush { highest_rank: _ }) => dist.straight_flushes += 1,
             Some(HandEvaluation::FourOfAKind { rank: _, kicker: _ }) => dist.four_of_a_kinds += 1,
