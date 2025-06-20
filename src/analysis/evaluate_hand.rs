@@ -1,10 +1,11 @@
 use self::HandEvaluation::*;
-use crate::analysis::rank_counter::RankCounter;
+use crate::analysis::rank_counter::{self, RankCounter};
 use crate::analysis::suit_grouping::SuitGrouping;
-use crate::cards::card::{ALL_RANKS, ALL_SUITS, Rank};
+use crate::cards::card::{ALL_RANKS, ALL_SUITS, Card, Rank};
 use crate::cards::cardset::CardSet;
 use crate::datastructures::stack_vec::StackVec;
 use std::cmp::Reverse;
+use std::mem::MaybeUninit;
 
 pub const MAX_HAND_SIZE: usize = 7;
 
@@ -296,6 +297,36 @@ impl HandEvaluation {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
+pub enum PreflopEvaluation {
+    PocketPair { rank: Rank },
+    HighCard { higher_rank: Rank, lower_rank: Rank },
+}
+
+impl PreflopEvaluation {
+    pub fn evaluate(pocket: CardSet) -> Option<Self> {
+        if pocket.len() != 2 {
+            return None;
+        }
+
+        let mut cards = StackVec::<Card, 2>::new();
+        for card in pocket.iter_desc() {
+            cards.push(card);
+        }
+
+        Some(if cards[0].rank == cards[1].rank {
+            PreflopEvaluation::PocketPair {
+                rank: cards[0].rank,
+            }
+        } else {
+            PreflopEvaluation::HighCard {
+                higher_rank: cards[0].rank,
+                lower_rank: cards[1].rank,
+            }
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,7 +334,12 @@ mod tests {
 
     fn test_eval<const LENGTH: usize>(arr: [Card; LENGTH]) -> HandEvaluation {
         const { assert!(LENGTH >= 5 && LENGTH <= 7) }
-        HandEvaluation::evaluate_postflop(CardSet::from(&arr)).expect("evaluate() returned None")
+        HandEvaluation::evaluate_postflop(CardSet::from(&arr))
+            .expect("evaluate_postflop() returned None")
+    }
+
+    fn test_preflop(arr: [Card; 2]) -> PreflopEvaluation {
+        PreflopEvaluation::evaluate(CardSet::from(&arr)).expect("evaluate() returned None")
     }
 
     #[test]
@@ -1482,6 +1518,26 @@ mod tests {
             HighCard {
                 rank: Rank::Ace,
                 kickers_sorted_desc: [Rank::Queen, Rank::Nine, Rank::Six, Rank::Three],
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_preflop_pocket_pair() {
+        let eval = test_preflop([Card::KING_CLUB, Card::KING_SPADE]);
+
+        assert_eq!(eval, PreflopEvaluation::PocketPair { rank: Rank::King });
+    }
+
+    #[test]
+    fn test_evaluate_preflop_not_pocket_pair() {
+        let eval = test_preflop([Card::ACE_CLUB, Card::KING_SPADE]);
+
+        assert_eq!(
+            eval,
+            PreflopEvaluation::HighCard {
+                higher_rank: Rank::Ace,
+                lower_rank: Rank::King
             }
         );
     }
