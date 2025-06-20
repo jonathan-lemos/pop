@@ -1,7 +1,7 @@
 use crate::{
     analysis::math::n_choose_r,
     cards::{card::Card, cardset::CardSet},
-    parallelism::os::get_parallelism_from_os,
+    parallelism::{os::get_parallelism_from_os, send_sync_raw_ptr::SendSyncRawPtr},
 };
 use crossbeam_channel::Sender;
 use std::{
@@ -9,18 +9,10 @@ use std::{
     thread::{self},
 };
 
-#[derive(Clone, Copy)]
-struct MutPtr<T> {
-    pub ptr: *mut T,
-}
-
-unsafe impl<T> Send for MutPtr<T> {}
-unsafe impl<T> Sync for MutPtr<T> {}
-
 unsafe fn parallel_combinations_of_slice_of_len_1(
     slice: &[Card],
     current: CardSet,
-    output: MutPtr<CardSet>,
+    output: SendSyncRawPtr<CardSet>,
     amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
@@ -41,7 +33,7 @@ unsafe fn parallel_combinations_of_slice_of_len_1(
 unsafe fn parallel_combinations_of_slice_of_len_2(
     slice: &[Card],
     current: CardSet,
-    output: MutPtr<CardSet>,
+    output: SendSyncRawPtr<CardSet>,
     amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
@@ -66,7 +58,7 @@ unsafe fn parallel_combinations_of_slice_of_len_2(
 unsafe fn parallel_combinations_of_slice_of_len_3(
     slice: &[Card],
     current: CardSet,
-    output: MutPtr<CardSet>,
+    output: SendSyncRawPtr<CardSet>,
     amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
@@ -95,7 +87,7 @@ unsafe fn parallel_combinations_of_slice_of_len_3(
 unsafe fn parallel_combinations_of_slice_of_len_4(
     slice: &[Card],
     current: CardSet,
-    output: MutPtr<CardSet>,
+    output: SendSyncRawPtr<CardSet>,
     amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
@@ -128,7 +120,7 @@ unsafe fn parallel_combinations_of_slice_of_len_4(
 unsafe fn parallel_combinations_of_slice_of_len_5(
     slice: &[Card],
     current: CardSet,
-    output: MutPtr<CardSet>,
+    output: SendSyncRawPtr<CardSet>,
     amount_done: &AtomicUsize,
 ) {
     let mut ptr = output.ptr;
@@ -207,7 +199,7 @@ unsafe fn parallel_combinations_of_slice<'a>(
         let amount = n_choose_r(slice.len() - i - 1, needed - 1);
         debug_assert!(amount > 0);
 
-        let current_mut_ptr = MutPtr { ptr: current_ptr };
+        let current_mut_ptr = SendSyncRawPtr { ptr: current_ptr };
 
         let mut new_current = current;
         new_current.add(slice[i]);
@@ -230,7 +222,7 @@ struct ParallelCombinationsWorkItem<'a> {
     pub slice: &'a [Card],
     pub current: CardSet,
     pub needed: usize,
-    pub output: MutPtr<CardSet>,
+    pub output: SendSyncRawPtr<CardSet>,
 }
 
 pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
@@ -250,7 +242,7 @@ pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
             slice: cards.as_slice(),
             current: CardSet::new(),
             needed: size,
-            output: MutPtr {
+            output: SendSyncRawPtr {
                 ptr: ret.as_mut_ptr(),
             },
         }))
