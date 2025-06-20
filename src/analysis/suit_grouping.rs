@@ -1,10 +1,8 @@
 use std::usize;
 
 use crate::{
-    cards::{
-        card::{Card, NUM_SUITS, Rank, Suit},
-        hand::HAND_SIZE,
-    },
+    analysis::evaluate_hand::MAX_HAND_SIZE,
+    cards::card::{Card, NUM_SUITS, Rank, Suit},
     datastructures::stack_vec::StackVec,
 };
 
@@ -13,7 +11,7 @@ use crate::{
 // The implementation here avoids heap allocations.
 #[derive(Clone, Copy)]
 pub struct SuitGrouping {
-    groups: [StackVec<Rank, HAND_SIZE>; NUM_SUITS],
+    groups: [StackVec<Rank, MAX_HAND_SIZE>; NUM_SUITS],
 }
 
 impl SuitGrouping {
@@ -42,7 +40,7 @@ impl SuitGrouping {
 
 #[cfg(test)]
 mod tests {
-    use crate::cards::suit_grouping::*;
+    use super::*;
 
     #[test]
     fn test_suit_grouping() {

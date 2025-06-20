@@ -1,55 +1,21 @@
 use self::HandEvaluation::*;
-use std::{cmp::Reverse, fmt::Display};
+use crate::analysis::rank_counter::RankCounter;
+use crate::analysis::suit_grouping::SuitGrouping;
+use crate::cards::card::{ALL_RANKS, ALL_SUITS, Card, Rank};
+use crate::cards::cardset::CardSet;
+use crate::datastructures::stack_vec::StackVec;
 
-use crate::{
-    cards::{
-        card::{ALL_RANKS, ALL_SUITS, Card, Rank},
-        cardset::CardSet,
-        rank_counter::RankCounter,
-        suit_grouping::SuitGrouping,
-    },
-    datastructures::stack_vec::StackVec,
-    util::ui::format_comma_separated_values,
-};
-
-pub const HAND_SIZE: usize = 7;
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Hand {
-    cardset: CardSet,
-}
-
-impl Hand {
-    pub fn new(cards: &[Card; HAND_SIZE]) -> Self {
-        let cardset = cards.into_iter().map(|x| *x).collect::<CardSet>();
-        debug_assert!(cardset.len() == HAND_SIZE);
-        Self { cardset }
-    }
-
-    pub unsafe fn from_cardset_unchecked(cardset: CardSet) -> Self {
-        Self { cardset }
-    }
-
-    pub fn iter_desc(&self) -> impl Iterator<Item = Card> {
-        self.cardset.iter_desc()
-    }
-}
-
-impl Display for Hand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        format_comma_separated_values(self.iter_desc(), f, |v, fmt| v.fmt(fmt))
-    }
-}
+pub const MAX_HAND_SIZE: usize = 7;
 
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Copy)]
 pub enum HandEvaluation {
     HighCard {
         rank: Rank,
-        kickers_sorted_desc: [Rank; 4],
+        kickers_sorted_desc: StackVec<Rank, 4>,
     },
     Pair {
         rank: Rank,
-        kickers_sorted_desc: [Rank; 3],
+        kickers_sorted_desc: StackVec<Rank, 3>,
     },
     TwoPair {
         higher_rank: Rank,
@@ -58,7 +24,7 @@ pub enum HandEvaluation {
     },
     ThreeOfAKind {
         rank: Rank,
-        kickers_sorted_desc: [Rank; 2],
+        kickers_sorted_desc: StackVec<Rank, 2>,
     },
     Straight {
         highest_rank: Rank,
@@ -79,7 +45,7 @@ pub enum HandEvaluation {
     },
 }
 
-fn count_ranks(cards: &Hand) -> RankCounter {
+fn count_ranks(cards: CardSet) -> RankCounter {
     let mut counter = RankCounter::new();
     for card in cards.iter_desc() {
         counter.inc(card.rank);
@@ -87,7 +53,7 @@ fn count_ranks(cards: &Hand) -> RankCounter {
     return counter;
 }
 
-fn group_by_suit(cards: &Hand) -> SuitGrouping {
+fn group_by_suit(cards: CardSet) -> SuitGrouping {
     let mut groupings = SuitGrouping::new();
     for card in cards.iter_desc() {
         groupings.insert(card);
@@ -138,7 +104,7 @@ struct Cardinalities {
 }
 
 impl Cardinalities {
-    fn new(cards: &Hand) -> Self {
+    fn new(cards: CardSet) -> Self {
         let by_rank = count_ranks(cards);
 
         let mut cardinalities = Self {
@@ -225,7 +191,7 @@ fn match_flush(by_suit: &SuitGrouping) -> Option<HandEvaluation> {
     return None;
 }
 
-fn match_straight(cards: &Hand) -> Option<HandEvaluation> {
+fn match_straight(cards: CardSet) -> Option<HandEvaluation> {
     if let Some(highest_rank) = straight_high_rank(cards.iter_desc().map(|x| x.rank)) {
         Some(Straight { highest_rank })
     } else {
@@ -245,11 +211,10 @@ fn match_trips(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
         for kicker in cardinalities.kickers.as_slice().iter().take(2) {
             kickers.push(*kicker);
         }
-        kickers.as_mut_slice().sort_unstable_by_key(|c| Reverse(*c));
 
         Some(ThreeOfAKind {
             rank: cardinalities.trips[0],
-            kickers_sorted_desc: [kickers[0], kickers[1]],
+            kickers_sorted_desc: StackVec::from([kickers[0], kickers[1]]),
         })
     }
 }
@@ -280,11 +245,11 @@ fn match_pair(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
     } else {
         Some(Pair {
             rank: cardinalities.pairs[0],
-            kickers_sorted_desc: [
+            kickers_sorted_desc: StackVec::from([
                 cardinalities.kickers[0],
                 cardinalities.kickers[1],
                 cardinalities.kickers[2],
-            ],
+            ]),
         })
     }
 }
@@ -292,38 +257,44 @@ fn match_pair(cardinalities: &Cardinalities) -> Option<HandEvaluation> {
 fn match_high_card(cardinalities: &Cardinalities) -> HandEvaluation {
     HighCard {
         rank: cardinalities.kickers[0],
-        kickers_sorted_desc: [
+        kickers_sorted_desc: StackVec::from([
             cardinalities.kickers[1],
             cardinalities.kickers[2],
             cardinalities.kickers[3],
             cardinalities.kickers[4],
-        ],
+        ]),
     }
 }
 
 impl HandEvaluation {
-    pub fn evaluate(hand: &Hand) -> Self {
+    pub fn evaluate(hand: CardSet) -> Option<Self> {
+        if hand.len() != 7 {
+            return None;
+        }
+
         let by_suit = group_by_suit(hand);
         let cardinalities = Cardinalities::new(hand);
 
-        match_straight_flush(&by_suit)
-            .or_else(|| match_four_of_a_kind(&cardinalities))
-            .or_else(|| match_full_house(&cardinalities))
-            .or_else(|| match_flush(&by_suit))
-            .or_else(|| match_straight(hand))
-            .or_else(|| match_trips(&cardinalities))
-            .or_else(|| match_two_pair(&cardinalities))
-            .or_else(|| match_pair(&cardinalities))
-            .unwrap_or_else(|| match_high_card(&cardinalities))
+        return Some(
+            match_straight_flush(&by_suit)
+                .or_else(|| match_four_of_a_kind(&cardinalities))
+                .or_else(|| match_full_house(&cardinalities))
+                .or_else(|| match_flush(&by_suit))
+                .or_else(|| match_straight(hand))
+                .or_else(|| match_trips(&cardinalities))
+                .or_else(|| match_two_pair(&cardinalities))
+                .or_else(|| match_pair(&cardinalities))
+                .unwrap_or_else(|| match_high_card(&cardinalities)),
+        );
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::cards::hand::*;
+    use super::*;
 
     fn test_eval(arr: [Card; 7]) -> HandEvaluation {
-        HandEvaluation::evaluate(&Hand::new(&arr))
+        HandEvaluation::evaluate(CardSet::from(&arr)).expect("evaluate() returned None")
     }
 
     #[test]
@@ -849,7 +820,7 @@ mod tests {
             hand,
             ThreeOfAKind {
                 rank: Rank::Eight,
-                kickers_sorted_desc: [Rank::Jack, Rank::Seven]
+                kickers_sorted_desc: [Rank::Jack, Rank::Seven].into()
             }
         );
     }
@@ -980,7 +951,7 @@ mod tests {
             hand,
             Pair {
                 rank: Rank::Jack,
-                kickers_sorted_desc: [Rank::Ace, Rank::Eight, Rank::Five],
+                kickers_sorted_desc: [Rank::Ace, Rank::Eight, Rank::Five].into(),
             }
         );
     }
@@ -1001,7 +972,7 @@ mod tests {
             hand,
             Pair {
                 rank: Rank::Five,
-                kickers_sorted_desc: [Rank::Ace, Rank::King, Rank::Queen],
+                kickers_sorted_desc: [Rank::Ace, Rank::King, Rank::Queen].into(),
             }
         );
     }
@@ -1022,7 +993,7 @@ mod tests {
             hand,
             Pair {
                 rank: Rank::Ace,
-                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Ten],
+                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Ten].into(),
             }
         );
     }
@@ -1043,7 +1014,7 @@ mod tests {
             hand,
             HighCard {
                 rank: Rank::King,
-                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Nine, Rank::Eight],
+                kickers_sorted_desc: [Rank::Queen, Rank::Jack, Rank::Nine, Rank::Eight].into(),
             }
         );
     }
@@ -1064,7 +1035,7 @@ mod tests {
             hand,
             HighCard {
                 rank: Rank::King,
-                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five],
+                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five].into(),
             }
         );
     }
@@ -1085,7 +1056,7 @@ mod tests {
             hand,
             HighCard {
                 rank: Rank::King,
-                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five],
+                kickers_sorted_desc: [Rank::Jack, Rank::Nine, Rank::Eight, Rank::Five].into(),
             }
         );
     }
@@ -1107,11 +1078,11 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Queen],
+            kickers_sorted_desc: [Rank::Ace, Rank::Queen].into(),
         };
         let h2 = ThreeOfAKind {
             rank: Rank::Ace,
-            kickers_sorted_desc: [Rank::King, Rank::Queen],
+            kickers_sorted_desc: [Rank::King, Rank::Queen].into(),
         };
 
         assert!(h1 < h2);
@@ -1121,11 +1092,11 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind_first_kicker() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Ten],
+            kickers_sorted_desc: [Rank::Ace, Rank::Ten].into(),
         };
         let h2 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Queen, Rank::Ten],
+            kickers_sorted_desc: [Rank::Queen, Rank::Ten].into(),
         };
 
         assert!(h1 > h2);
@@ -1135,11 +1106,11 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind_second_kicker() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack].into(),
         };
         let h2 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Ten],
+            kickers_sorted_desc: [Rank::Ace, Rank::Ten].into(),
         };
 
         assert!(h1 > h2);
@@ -1149,11 +1120,11 @@ mod tests {
     fn test_hand_cmp_three_of_a_kind_equal() {
         let h1 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack].into(),
         };
         let h2 = ThreeOfAKind {
             rank: Rank::King,
-            kickers_sorted_desc: [Rank::Ace, Rank::Jack],
+            kickers_sorted_desc: [Rank::Ace, Rank::Jack].into(),
         };
 
         assert!(h1 == h2);

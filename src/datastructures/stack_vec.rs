@@ -1,11 +1,9 @@
-use std::{
-    cmp::Ordering,
-    fmt::{Debug, Display},
-    mem::MaybeUninit,
-    ops::{Index, Range},
-};
-
 use crate::util::ui::format_comma_separated_values;
+use std::cmp::Ordering;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
+use std::mem::MaybeUninit;
+use std::ops::{Index, Range};
 
 // A vector whose memory lives entirely on the stack.
 pub struct StackVec<T, const LENGTH: usize> {
@@ -55,6 +53,36 @@ impl<T, const LENGTH: usize> StackVec<T, LENGTH> {
 
     pub fn reset(&mut self) {
         self.length = 0;
+    }
+}
+
+impl<T, const LENGTH: usize, const ARR_LENGTH: usize> From<[T; ARR_LENGTH]>
+    for StackVec<T, LENGTH>
+{
+    fn from(value: [T; ARR_LENGTH]) -> Self {
+        const { assert!(LENGTH >= ARR_LENGTH) }
+
+        let mut ret = Self::new();
+        for elem in value {
+            ret.push(elem);
+        }
+
+        ret
+    }
+}
+
+impl<T: Clone, const LENGTH: usize, const ARR_LENGTH: usize> From<&[T; ARR_LENGTH]>
+    for StackVec<T, LENGTH>
+{
+    fn from(value: &[T; ARR_LENGTH]) -> Self {
+        const { assert!(LENGTH >= ARR_LENGTH) }
+
+        let mut ret = Self::new();
+        for elem in value {
+            ret.push(elem.clone());
+        }
+
+        ret
     }
 }
 
@@ -165,6 +193,14 @@ impl<T: Ord, const LENGTH: usize> Ord for StackVec<T, LENGTH> {
     }
 }
 
+impl<T: Hash, const LENGTH: usize> Hash for StackVec<T, LENGTH> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for elem in self.iter() {
+            elem.hash(state);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::datastructures::stack_vec::*;
@@ -182,6 +218,28 @@ mod tests {
         assert_eq!(vec[2], 3);
         assert_eq!(vec[0..2], [1, 2]);
         assert_eq!(vec.as_slice(), &[1, 2, 3]);
+    }
+
+    #[test]
+    fn test_stack_vec_from() {
+        let mut v1 = StackVec::<i32, 3>::from([1, 2]);
+
+        let mut v2 = StackVec::<i32, 3>::new();
+        v2.push(1);
+        v2.push(2);
+
+        assert_eq!(v1, v2);
+    }
+
+    #[test]
+    fn test_stack_vec_from_ref() {
+        let mut v1 = StackVec::<i32, 3>::from(&[1, 2]);
+
+        let mut v2 = StackVec::<i32, 3>::new();
+        v2.push(1);
+        v2.push(2);
+
+        assert_eq!(v1, v2);
     }
 
     #[test]

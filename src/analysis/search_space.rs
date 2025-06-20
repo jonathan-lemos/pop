@@ -1,6 +1,6 @@
 use crate::{
     analysis::math::n_choose_r,
-    cards::{card::Card, cardset::CardSet, hand::Hand},
+    cards::{card::Card, cardset::CardSet},
     parallelism::os::get_parallelism_from_os,
 };
 use crossbeam_channel::Sender;
@@ -280,11 +280,8 @@ pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
     ret
 }
 
-pub fn all_seven_card_hands() -> Vec<Hand> {
+pub fn all_seven_card_hands() -> Vec<CardSet> {
     combinations(CardSet::universe(), 7)
-        .into_iter()
-        .map(|x| unsafe { Hand::from_cardset_unchecked(x) })
-        .collect()
 }
 
 #[cfg(test)]

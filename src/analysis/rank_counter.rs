@@ -34,7 +34,7 @@ impl RankCounter {
 
 #[cfg(test)]
 mod tests {
-    use crate::cards::rank_counter::*;
+    use super::*;
 
     #[test]
     fn test_rank_counter() {

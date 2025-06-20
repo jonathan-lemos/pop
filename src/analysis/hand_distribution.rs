@@ -1,9 +1,8 @@
 use std::ops::Add;
 
-use crate::{
-    cards::hand::{Hand, HandEvaluation},
-    parallelism::algorithms::{into_parallel_reduce, parallel_map},
-};
+use crate::analysis::evaluate_hand::HandEvaluation;
+use crate::cards::cardset::CardSet;
+use crate::parallelism::algorithms::{into_parallel_reduce, parallel_map};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct HandDistribution {
@@ -16,6 +15,7 @@ pub struct HandDistribution {
     pub two_pairs: usize,
     pub pairs: usize,
     pub high_cards: usize,
+    pub discarded_hands: usize,
 }
 
 impl HandDistribution {
@@ -30,46 +30,52 @@ impl HandDistribution {
             two_pairs: 0,
             pairs: 0,
             high_cards: 0,
+            discarded_hands: 0,
         }
     }
 
-    pub fn evaluate(hands: &[Hand]) -> Self {
+    pub fn evaluate(hands: &[CardSet]) -> Self {
         if hands.is_empty() {
             return HandDistribution::new();
         }
-        let distributions = parallel_map(hands, |h| HandDistribution::from(h));
+        let distributions = parallel_map(hands, |h| HandDistribution::from(*h));
         into_parallel_reduce(distributions, |a, b| a + b).unwrap()
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.discarded_hands == 0
     }
 }
 
-impl From<&Hand> for HandDistribution {
-    fn from(value: &Hand) -> Self {
+impl From<CardSet> for HandDistribution {
+    fn from(value: CardSet) -> Self {
         let mut dist = Self::new();
         match HandEvaluation::evaluate(value) {
-            HandEvaluation::StraightFlush { highest_rank: _ } => dist.straight_flushes += 1,
-            HandEvaluation::FourOfAKind { rank: _, kicker: _ } => dist.four_of_a_kinds += 1,
-            HandEvaluation::FullHouse { triple: _, pair: _ } => dist.full_houses += 1,
-            HandEvaluation::Flush {
+            None => dist.discarded_hands += 1,
+            Some(HandEvaluation::StraightFlush { highest_rank: _ }) => dist.straight_flushes += 1,
+            Some(HandEvaluation::FourOfAKind { rank: _, kicker: _ }) => dist.four_of_a_kinds += 1,
+            Some(HandEvaluation::FullHouse { triple: _, pair: _ }) => dist.full_houses += 1,
+            Some(HandEvaluation::Flush {
                 ranks_sorted_desc: _,
-            } => dist.flushes += 1,
-            HandEvaluation::Straight { highest_rank: _ } => dist.straights += 1,
-            HandEvaluation::ThreeOfAKind {
+            }) => dist.flushes += 1,
+            Some(HandEvaluation::Straight { highest_rank: _ }) => dist.straights += 1,
+            Some(HandEvaluation::ThreeOfAKind {
                 rank: _,
                 kickers_sorted_desc: _,
-            } => dist.three_of_a_kinds += 1,
-            HandEvaluation::TwoPair {
+            }) => dist.three_of_a_kinds += 1,
+            Some(HandEvaluation::TwoPair {
                 higher_rank: _,
                 lower_rank: _,
                 kicker: _,
-            } => dist.two_pairs += 1,
-            HandEvaluation::Pair {
+            }) => dist.two_pairs += 1,
+            Some(HandEvaluation::Pair {
                 rank: _,
                 kickers_sorted_desc: _,
-            } => dist.pairs += 1,
-            HandEvaluation::HighCard {
+            }) => dist.pairs += 1,
+            Some(HandEvaluation::HighCard {
                 rank: _,
                 kickers_sorted_desc: _,
-            } => dist.high_cards += 1,
+            }) => dist.high_cards += 1,
         }
         dist
     }
@@ -89,6 +95,7 @@ impl Add<HandDistribution> for HandDistribution {
             two_pairs: self.two_pairs + rhs.two_pairs,
             pairs: self.pairs + rhs.pairs,
             high_cards: self.high_cards + rhs.high_cards,
+            discarded_hands: self.discarded_hands + rhs.discarded_hands,
         }
     }
 }
@@ -193,8 +200,8 @@ mod tests {
             ],
         ]
         .iter()
-        .map(Hand::new)
-        .collect::<Vec<Hand>>();
+        .map(CardSet::from)
+        .collect::<Vec<CardSet>>();
 
         let dist = HandDistribution::evaluate(hands.as_slice());
 
@@ -210,7 +217,8 @@ mod tests {
                 three_of_a_kinds: 1,
                 two_pairs: 1,
                 pairs: 1,
-                high_cards: 1
+                high_cards: 1,
+                discarded_hands: 0
             }
         );
     }
@@ -232,7 +240,8 @@ mod tests {
                 three_of_a_kinds: 6_461_620,
                 two_pairs: 31_433_400,
                 pairs: 58_627_800,
-                high_cards: 23_294_460
+                high_cards: 23_294_460,
+                discarded_hands: 0,
             }
         );
         assert_eq!(hands.len(), 133_784_560);
