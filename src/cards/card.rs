@@ -94,6 +94,49 @@ impl Display for Card {
 }
 
 impl Card {
+    pub fn parse(str: &str) -> Option<Card> {
+        let mut chars = str.chars();
+        let first_char = chars.next()?;
+
+        let rank = match first_char {
+            '2' => Rank::Two,
+            '3' => Rank::Three,
+            '4' => Rank::Four,
+            '5' => Rank::Five,
+            '6' => Rank::Six,
+            '7' => Rank::Seven,
+            '8' => Rank::Eight,
+            '9' => Rank::Nine,
+            'T' => Rank::Ten,
+            'J' => Rank::Jack,
+            'Q' => Rank::Queen,
+            'K' => Rank::King,
+            'A' => Rank::Ace,
+            '1' => match chars.next()? {
+                '0' => Rank::Ten,
+                _ => return None,
+            },
+            _ => return None,
+        };
+
+        let suit = match chars.next()? {
+            'c' => Suit::Club,
+            '♣' => Suit::Club,
+            'd' => Suit::Diamond,
+            '♦' => Suit::Diamond,
+            'h' => Suit::Heart,
+            '♥' => Suit::Heart,
+            's' => Suit::Spade,
+            '♠' => Suit::Spade,
+            _ => return None,
+        };
+
+        Some(Card {
+            rank: rank,
+            suit: suit,
+        })
+    }
+
     pub const TWO_CLUB: Card = Card {
         rank: Rank::Two,
         suit: Suit::Club,

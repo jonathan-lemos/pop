@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    ops::{BitAnd, BitOr, Sub},
+    ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Sub, SubAssign},
 };
 
 use crate::{
@@ -28,8 +28,8 @@ impl CardSet {
         self.bitset |= (1 as u64) << card_index(card);
     }
 
-    pub fn add_all(&mut self, other: CardSet) {
-        self.bitset |= other.bitset
+    pub fn disjoint_with(&self, other: CardSet) -> bool {
+        self.bitset & other.bitset == 0
     }
 
     pub fn has(&self, card: Card) -> bool {
@@ -47,12 +47,30 @@ impl CardSet {
         self.bitset.count_ones() as usize
     }
 
-    pub fn remove(&mut self, card: Card) {
-        self.bitset &= !((1 as u64) << card_index(card));
+    pub fn union_if_disjoint(sets: &[CardSet]) -> Option<CardSet> {
+        let mut seen = CardSet::new();
+        for set in sets {
+            if !seen.disjoint_with(*set) {
+                return None;
+            }
+            seen |= *set;
+        }
+        Some(seen)
     }
+}
 
-    pub fn remove_all(&mut self, other: CardSet) {
-        self.bitset &= !other.bitset
+impl Add<Card> for CardSet {
+    type Output = CardSet;
+
+    fn add(mut self, rhs: Card) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
+impl AddAssign<Card> for CardSet {
+    fn add_assign(&mut self, rhs: Card) {
+        self.bitset |= (1 as u64) << card_index(rhs);
     }
 }
 
@@ -66,12 +84,39 @@ impl BitAnd<CardSet> for CardSet {
     }
 }
 
+impl BitAndAssign<CardSet> for CardSet {
+    fn bitand_assign(&mut self, rhs: CardSet) {
+        self.bitset &= rhs.bitset
+    }
+}
+
 impl BitOr<CardSet> for CardSet {
     type Output = CardSet;
 
     fn bitor(mut self, rhs: CardSet) -> Self::Output {
-        self.add_all(rhs);
+        self |= rhs;
         self
+    }
+}
+
+impl BitOrAssign<CardSet> for CardSet {
+    fn bitor_assign(&mut self, rhs: CardSet) {
+        self.bitset |= rhs.bitset
+    }
+}
+
+impl Sub<Card> for CardSet {
+    type Output = CardSet;
+
+    fn sub(mut self, rhs: Card) -> Self::Output {
+        self -= rhs;
+        self
+    }
+}
+
+impl SubAssign<Card> for CardSet {
+    fn sub_assign(&mut self, rhs: Card) {
+        self.bitset &= !((1 as u64) << card_index(rhs));
     }
 }
 
@@ -79,8 +124,14 @@ impl Sub<CardSet> for CardSet {
     type Output = CardSet;
 
     fn sub(mut self, rhs: CardSet) -> Self::Output {
-        self.remove_all(rhs);
+        self -= rhs;
         self
+    }
+}
+
+impl SubAssign<CardSet> for CardSet {
+    fn sub_assign(&mut self, rhs: CardSet) {
+        self.bitset &= !rhs.bitset
     }
 }
 
@@ -88,7 +139,7 @@ impl FromIterator<Card> for CardSet {
     fn from_iter<T: IntoIterator<Item = Card>>(iter: T) -> Self {
         let mut set = CardSet::new();
         for card in iter {
-            set.add(card);
+            set += card;
         }
         set
     }
@@ -143,58 +194,64 @@ impl Iterator for CardSetIterator {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_card_set_add() {
-        let mut set = CardSet::new();
-
-        set.add(Card::ACE_SPADE);
-        set.add(Card::SIX_HEART);
-        set.add(Card::NINE_HEART);
-        set.add(Card::NINE_HEART);
-
-        assert!(set.has(Card::ACE_SPADE));
-        assert!(set.has(Card::SIX_HEART));
-        assert!(set.has(Card::NINE_HEART));
-        assert!(!set.has(Card::TWO_DIAMOND));
+    fn set_vec(set: CardSet) -> Vec<Card> {
+        set.iter_desc().collect::<Vec<Card>>()
     }
 
     #[test]
-    fn test_card_set_collect() {
-        let set = vec![
+    fn test_cardset_add() {
+        let mut set = CardSet::new();
+
+        set += Card::ACE_SPADE;
+        set += Card::SIX_HEART;
+        set += Card::NINE_HEART;
+        set = set + Card::NINE_HEART;
+
+        assert_eq!(
+            set_vec(set),
+            vec![Card::ACE_SPADE, Card::NINE_HEART, Card::SIX_HEART]
+        )
+    }
+
+    #[test]
+    fn test_cardset_collect() {
+        let set = CardSet::from(&[
             Card::ACE_SPADE,
             Card::SIX_HEART,
             Card::NINE_HEART,
             Card::NINE_HEART,
-        ]
-        .into_iter()
-        .collect::<CardSet>();
+        ]);
 
-        assert!(set.has(Card::ACE_SPADE));
-        assert!(set.has(Card::SIX_HEART));
-        assert!(set.has(Card::NINE_HEART));
-        assert!(!set.has(Card::TWO_DIAMOND));
+        assert_eq!(
+            set_vec(set),
+            vec![Card::ACE_SPADE, Card::NINE_HEART, Card::SIX_HEART]
+        )
     }
 
     #[test]
-    fn test_card_set_remove() {
-        let mut set = vec![Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]
-            .into_iter()
-            .collect::<CardSet>();
+    fn test_cardset_remove() {
+        let mut set = CardSet::from(&[Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]);
 
-        set.remove(Card::NINE_HEART);
-        set.remove(Card::TWO_DIAMOND);
+        set -= Card::NINE_HEART;
+        set -= Card::TWO_DIAMOND;
+        set = set - Card::ACE_SPADE;
 
-        assert!(set.has(Card::ACE_SPADE));
-        assert!(set.has(Card::SIX_HEART));
-        assert!(!set.has(Card::NINE_HEART));
-        assert!(!set.has(Card::TWO_DIAMOND));
+        assert_eq!(set_vec(set), vec![Card::SIX_HEART]);
     }
 
     #[test]
-    fn test_card_set_iter_desc() {
-        let set = vec![Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]
-            .into_iter()
-            .collect::<CardSet>();
+    fn test_cardset_has() {
+        let set = CardSet::from(&[Card::KING_CLUB, Card::SEVEN_DIAMOND]);
+
+        assert!(set.has(Card::KING_CLUB));
+        assert!(set.has(Card::SEVEN_DIAMOND));
+        assert!(!set.has(Card::ACE_SPADE));
+        assert!(!set.has(Card::SIX_HEART));
+    }
+
+    #[test]
+    fn test_cardset_iter_desc() {
+        let set = CardSet::from(&[Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]);
 
         let iterated = set.iter_desc().collect::<Vec<Card>>();
 
@@ -205,34 +262,27 @@ mod tests {
     }
 
     #[test]
-    fn test_card_set_iter_desc_full() {
-        let set = ALL_CARDS.into_iter().collect::<CardSet>();
-
-        let iterated = set.iter_desc().collect::<Vec<Card>>();
-
-        assert_eq!(iterated, ALL_CARDS.into_iter().rev().collect::<Vec<Card>>());
+    fn test_cardset_universe() {
+        let expected = ALL_CARDS.into_iter().collect::<CardSet>();
+        assert_eq!(CardSet::universe(), expected);
     }
 
     #[test]
-    fn test_card_set_add_all() {
-        let mut set = vec![Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]
-            .into_iter()
-            .collect::<CardSet>();
+    fn test_cardset_add_all() {
+        let mut set = CardSet::from(&[Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]);
 
-        let other = vec![
+        let other = CardSet::from(&[
             Card::ACE_SPADE,
             Card::KING_SPADE,
             Card::QUEEN_SPADE,
             Card::NINE_HEART,
-        ]
-        .into_iter()
-        .collect::<CardSet>();
+        ]);
 
-        set.add_all(other);
+        let set_clone = set | other;
+        set |= other;
 
-        let contents = set.iter_desc().collect::<Vec<Card>>();
         assert_eq!(
-            contents,
+            set_vec(set),
             vec![
                 Card::ACE_SPADE,
                 Card::KING_SPADE,
@@ -241,31 +291,29 @@ mod tests {
                 Card::SIX_HEART
             ]
         );
+        assert_eq!(set, set_clone);
     }
 
     #[test]
-    fn test_card_set_remove_all() {
-        let mut set = vec![Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]
-            .into_iter()
-            .collect::<CardSet>();
+    fn test_cardset_remove_all() {
+        let mut set = CardSet::from(&[Card::ACE_SPADE, Card::SIX_HEART, Card::NINE_HEART]);
 
-        let other = vec![
+        let other = CardSet::from(&[
             Card::ACE_SPADE,
             Card::KING_SPADE,
             Card::QUEEN_SPADE,
             Card::NINE_HEART,
-        ]
-        .into_iter()
-        .collect::<CardSet>();
+        ]);
 
-        set.remove_all(other);
+        let set_clone = set - other;
+        set -= other;
 
-        let contents = set.iter_desc().collect::<Vec<Card>>();
-        assert_eq!(contents, vec![Card::SIX_HEART]);
+        assert_eq!(set_vec(set), vec![Card::SIX_HEART]);
+        assert_eq!(set, set_clone);
     }
 
     #[test]
-    fn test_card_set_union() {
+    fn test_cardset_union() {
         let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE, Card::QUEEN_SPADE]);
         let set2 = CardSet::from(&[
             Card::KING_SPADE,
@@ -286,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn test_card_set_intersection() {
+    fn test_cardset_intersection() {
         let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE, Card::QUEEN_SPADE]);
         let set2 = CardSet::from(&[
             Card::KING_SPADE,
@@ -298,5 +346,66 @@ mod tests {
         let expected = CardSet::from(&[Card::QUEEN_SPADE, Card::KING_SPADE]);
 
         assert_eq!(set1 & set2, expected);
+    }
+
+    #[test]
+    fn test_disjoint_with() {
+        let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE]);
+        let set2 = CardSet::from(&[Card::KING_SPADE, Card::QUEEN_SPADE, Card::TEN_SPADE]);
+        let set3 = CardSet::from(&[
+            Card::NINE_DIAMOND,
+            Card::TEN_SPADE,
+            Card::JACK_SPADE,
+            Card::QUEEN_SPADE,
+        ]);
+
+        assert!(!set1.disjoint_with(set1));
+        assert!(!set1.disjoint_with(set2));
+        assert!(!set2.disjoint_with(set1));
+        assert!(!set2.disjoint_with(set2));
+        assert!(!set2.disjoint_with(set3));
+        assert!(!set3.disjoint_with(set2));
+        assert!(!set3.disjoint_with(set3));
+
+        assert!(set1.disjoint_with(set3));
+        assert!(set3.disjoint_with(set1));
+    }
+
+    #[test]
+    fn test_union_if_disjoint_not_disjoint() {
+        let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE]);
+        let set2 = CardSet::from(&[Card::QUEEN_SPADE, Card::TEN_SPADE]);
+        let set3 = CardSet::from(&[
+            Card::NINE_DIAMOND,
+            Card::TEN_SPADE,
+            Card::JACK_SPADE,
+            Card::QUEEN_SPADE,
+        ]);
+
+        assert_eq!(CardSet::union_if_disjoint(&[set1, set2, set3]), None);
+    }
+
+    #[test]
+    fn test_union_if_disjoint() {
+        let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE]);
+        let set2 = CardSet::from(&[Card::QUEEN_SPADE, Card::TEN_SPADE]);
+        let set3 = CardSet::from(&[Card::NINE_DIAMOND, Card::JACK_SPADE]);
+
+        assert_eq!(
+            CardSet::union_if_disjoint(&[set1, set2, set3]),
+            Some(CardSet::from(&[
+                Card::ACE_SPADE,
+                Card::KING_SPADE,
+                Card::QUEEN_SPADE,
+                Card::TEN_SPADE,
+                Card::NINE_DIAMOND,
+                Card::JACK_SPADE
+            ]))
+        );
+    }
+
+    #[test]
+    fn test_union_if_disjoint_empty() {
+        assert_eq!(CardSet::union_if_disjoint(&[]), Some(CardSet::new()));
     }
 }

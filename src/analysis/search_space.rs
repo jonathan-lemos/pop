@@ -24,7 +24,7 @@ unsafe fn parallel_combinations_of_slice_of_len_1(
             *ptr = set;
             ptr = ptr.add(1);
         }
-        set.remove(slice[x1]);
+        set -= slice[x1];
     }
 
     amount_done.fetch_add(n_choose_r(slice.len(), 1), Ordering::Release);
@@ -47,9 +47,9 @@ unsafe fn parallel_combinations_of_slice_of_len_2(
                 *ptr = set;
                 ptr = ptr.add(1);
             }
-            set.remove(slice[x2]);
+            set -= slice[x2];
         }
-        set.remove(slice[x1]);
+        set -= slice[x1];
     }
 
     amount_done.fetch_add(n_choose_r(slice.len(), 2), Ordering::Release);
@@ -74,11 +74,11 @@ unsafe fn parallel_combinations_of_slice_of_len_3(
                     *ptr = set;
                     ptr = ptr.add(1);
                 }
-                set.remove(slice[x3]);
+                set -= slice[x3];
             }
-            set.remove(slice[x2]);
+            set -= slice[x2];
         }
-        set.remove(slice[x1]);
+        set -= slice[x1];
     }
 
     amount_done.fetch_add(n_choose_r(slice.len(), 3), Ordering::Release);
@@ -105,13 +105,13 @@ unsafe fn parallel_combinations_of_slice_of_len_4(
                         *ptr = set;
                         ptr = ptr.add(1);
                     }
-                    set.remove(slice[x4]);
+                    set -= slice[x4];
                 }
-                set.remove(slice[x3]);
+                set -= slice[x3];
             }
-            set.remove(slice[x2]);
+            set -= slice[x2];
         }
-        set.remove(slice[x1]);
+        set -= slice[x1];
     }
 
     amount_done.fetch_add(n_choose_r(slice.len(), 4), Ordering::Release);
@@ -140,15 +140,15 @@ unsafe fn parallel_combinations_of_slice_of_len_5(
                             *ptr = set;
                             ptr = ptr.add(1);
                         }
-                        set.remove(slice[x5]);
+                        set -= slice[x5];
                     }
-                    set.remove(slice[x4]);
+                    set -= slice[x4];
                 }
-                set.remove(slice[x3]);
+                set -= slice[x3];
             }
-            set.remove(slice[x2]);
+            set -= slice[x2];
         }
-        set.remove(slice[x1]);
+        set -= slice[x1];
     }
 
     amount_done.fetch_add(n_choose_r(slice.len(), 5), Ordering::Release);

@@ -19,3 +19,11 @@ pub fn format_separated_values<
     }
     Ok(())
 }
+
+pub fn as_percentage(numerator: usize, denominator: usize) -> String {
+    if denominator != 0 {
+        format!("{:.2}%", numerator as f64 / denominator as f64)
+    } else {
+        "NaN%".to_string()
+    }
+}

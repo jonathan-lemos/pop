@@ -4,7 +4,7 @@ use crate::analysis::evaluate_hand::HandEvaluation;
 use crate::cards::cardset::CardSet;
 use crate::parallelism::algorithms::{into_parallel_reduce, parallel_map};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct HandDistribution {
     pub straight_flushes: usize,
     pub four_of_a_kinds: usize,

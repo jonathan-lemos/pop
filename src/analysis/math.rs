@@ -16,7 +16,7 @@ pub fn n_choose_r(n: usize, r: usize) -> usize {
     numerator / denominator
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct SatisfactionFraction {
     pub satisfying: usize,
     pub total: usize,
