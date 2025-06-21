@@ -17,7 +17,7 @@ pub fn n_choose_r(n: usize, r: usize) -> usize {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct SatisfactionRatio {
+pub struct SatisfactionFraction {
     pub satisfying: usize,
     pub total: usize,
 }
@@ -25,20 +25,20 @@ pub struct SatisfactionRatio {
 pub fn satisfaction_ratio<T: Send + Sync, P: Fn(&T) -> bool + Send + Sync>(
     slice: &[T],
     predicate: P,
-) -> SatisfactionRatio {
+) -> SatisfactionFraction {
     if slice.is_empty() {
-        return SatisfactionRatio {
+        return SatisfactionFraction {
             satisfying: 0,
             total: 0,
         };
     }
 
-    let ratios = parallel_map(slice, |x| SatisfactionRatio {
+    let ratios = parallel_map(slice, |x| SatisfactionFraction {
         satisfying: if predicate(x) { 1 } else { 0 },
         total: 1,
     });
 
-    into_parallel_reduce(ratios, |a, b| SatisfactionRatio {
+    into_parallel_reduce(ratios, |a, b| SatisfactionFraction {
         satisfying: a.satisfying + b.satisfying,
         total: a.total + b.total,
     })
@@ -66,7 +66,7 @@ mod tests {
 
         assert_eq!(
             satisfaction_ratio(nums, |x| x % 2 == 0),
-            SatisfactionRatio {
+            SatisfactionFraction {
                 satisfying: 2,
                 total: 7
             }
@@ -79,7 +79,7 @@ mod tests {
 
         assert_eq!(
             satisfaction_ratio(nums.as_slice(), |x| *x <= 100),
-            SatisfactionRatio {
+            SatisfactionFraction {
                 satisfying: 100,
                 total: 10000
             }
@@ -92,7 +92,7 @@ mod tests {
 
         assert_eq!(
             satisfaction_ratio(nums.as_slice(), |x| *x > 10000),
-            SatisfactionRatio {
+            SatisfactionFraction {
                 satisfying: 0,
                 total: 10000
             }
@@ -105,7 +105,7 @@ mod tests {
 
         assert_eq!(
             satisfaction_ratio(nums, |_| true),
-            SatisfactionRatio {
+            SatisfactionFraction {
                 satisfying: 0,
                 total: 0
             }

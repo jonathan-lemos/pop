@@ -1,4 +1,4 @@
-use crate::util::ui::format_comma_separated_values;
+use crate::util::ui::format_separated_values;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -120,7 +120,7 @@ impl<T, const LENGTH: usize> Index<Range<usize>> for StackVec<T, LENGTH> {
 impl<T: Debug, const LENGTH: usize> Debug for StackVec<T, LENGTH> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("[")?;
-        format_comma_separated_values(self.as_slice().into_iter(), f, |v, fmt| {
+        format_separated_values(self.as_slice().into_iter(), ", ", f, |v, fmt| {
             Debug::fmt(&v, fmt)
         })?;
         f.write_str("]")
@@ -130,7 +130,7 @@ impl<T: Debug, const LENGTH: usize> Debug for StackVec<T, LENGTH> {
 impl<T: Display, const LENGTH: usize> Display for StackVec<T, LENGTH> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("[")?;
-        format_comma_separated_values(self.as_slice().into_iter(), f, |v, fmt| {
+        format_separated_values(self.as_slice().into_iter(), ", ", f, |v, fmt| {
             Display::fmt(&v, fmt)
         })?;
         f.write_str("]")

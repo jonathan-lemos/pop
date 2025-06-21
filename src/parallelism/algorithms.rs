@@ -1,4 +1,4 @@
-use std::{cmp::min, num::NonZero, ops::Range, thread};
+use std::{cmp::min, mem::ManuallyDrop, num::NonZero, ops::Range, thread};
 
 use crate::parallelism::{os::get_parallelism_from_os, send_sync_raw_ptr::SendSyncRawPtr};
 
@@ -127,10 +127,14 @@ fn into_parallel_map_with_parallelism<T: Sync, U: Send, F: Fn(T) -> U + Send + S
 }
 
 fn into_parallel_reduce_with_parallelism<T: Send + Sync, F: Fn(T, T) -> T + Send + Sync>(
-    mut vec: Vec<T>,
+    vec: Vec<T>,
     max_parallelism: NonZero<usize>,
     reducer: F,
 ) -> Option<T> {
+    let mut vec = vec
+        .into_iter()
+        .map(ManuallyDrop::new)
+        .collect::<Vec<ManuallyDrop<T>>>();
     let subranges = SubrangeIterator::from_range(0..vec.len(), max_parallelism);
 
     let input_ptr = SendSyncRawPtr {
@@ -141,9 +145,12 @@ fn into_parallel_reduce_with_parallelism<T: Send + Sync, F: Fn(T, T) -> T + Send
         let threads = subranges.map(|subrange| {
             let reducer_ref = &reducer;
             s.spawn(move || {
-                let mut current = unsafe { (input_ptr + subrange.start).get() };
+                let mut current =
+                    unsafe { ManuallyDrop::into_inner((input_ptr + subrange.start).get()) };
                 for i in subrange.start + 1..subrange.end {
-                    current = reducer_ref(current, unsafe { (input_ptr + i).get() });
+                    current = reducer_ref(current, unsafe {
+                        ManuallyDrop::into_inner((input_ptr + i).get())
+                    });
                 }
                 current
             })
@@ -151,8 +158,8 @@ fn into_parallel_reduce_with_parallelism<T: Send + Sync, F: Fn(T, T) -> T + Send
 
         threads
             .into_iter()
-            .map(|t| t.join().unwrap())
-            .collect::<Vec<T>>()
+            .map(|t| ManuallyDrop::new(t.join().unwrap()))
+            .collect::<Vec<ManuallyDrop<T>>>()
     });
 
     if values.is_empty() {
@@ -161,9 +168,12 @@ fn into_parallel_reduce_with_parallelism<T: Send + Sync, F: Fn(T, T) -> T + Send
     let value_ptr = SendSyncRawPtr {
         ptr: values.as_mut_ptr(),
     };
-    let mut current = unsafe { value_ptr.get() };
+    let mut current = ManuallyDrop::into_inner(unsafe { value_ptr.get() });
     for i in 1..values.len() {
-        current = reducer(current, unsafe { (value_ptr + i).get() });
+        current = reducer(
+            current,
+            ManuallyDrop::into_inner(unsafe { (value_ptr + i).get() }),
+        );
     }
     Some(current)
 }

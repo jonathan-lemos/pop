@@ -1,11 +1,11 @@
 use std::{
     fmt::Display,
-    ops::{BitOr, Sub},
+    ops::{BitAnd, BitOr, Sub},
 };
 
 use crate::{
     cards::card::{ALL_CARDS, Card, card_index},
-    util::ui::format_comma_separated_values,
+    util::ui::format_separated_values,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -56,6 +56,16 @@ impl CardSet {
     }
 }
 
+impl BitAnd<CardSet> for CardSet {
+    type Output = CardSet;
+
+    fn bitand(self, rhs: CardSet) -> Self::Output {
+        Self {
+            bitset: self.bitset & rhs.bitset,
+        }
+    }
+}
+
 impl BitOr<CardSet> for CardSet {
     type Output = CardSet;
 
@@ -98,7 +108,7 @@ impl From<&[Card]> for CardSet {
 
 impl Display for CardSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        format_comma_separated_values(self.iter_desc(), f, |v, fmt| v.fmt(fmt))
+        format_separated_values(self.iter_desc(), "", f, |v, fmt| v.fmt(fmt))
     }
 }
 
@@ -252,5 +262,41 @@ mod tests {
 
         let contents = set.iter_desc().collect::<Vec<Card>>();
         assert_eq!(contents, vec![Card::SIX_HEART]);
+    }
+
+    #[test]
+    fn test_card_set_union() {
+        let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE, Card::QUEEN_SPADE]);
+        let set2 = CardSet::from(&[
+            Card::KING_SPADE,
+            Card::QUEEN_SPADE,
+            Card::TEN_SPADE,
+            Card::NINE_DIAMOND,
+        ]);
+
+        let expected = CardSet::from(&[
+            Card::ACE_SPADE,
+            Card::KING_SPADE,
+            Card::QUEEN_SPADE,
+            Card::TEN_SPADE,
+            Card::NINE_DIAMOND,
+        ]);
+
+        assert_eq!(set1 | set2, expected);
+    }
+
+    #[test]
+    fn test_card_set_intersection() {
+        let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE, Card::QUEEN_SPADE]);
+        let set2 = CardSet::from(&[
+            Card::KING_SPADE,
+            Card::QUEEN_SPADE,
+            Card::TEN_SPADE,
+            Card::NINE_DIAMOND,
+        ]);
+
+        let expected = CardSet::from(&[Card::QUEEN_SPADE, Card::KING_SPADE]);
+
+        assert_eq!(set1 & set2, expected);
     }
 }
