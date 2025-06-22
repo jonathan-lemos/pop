@@ -41,7 +41,7 @@ pub fn calculate_odds(
 
     let mut all_taken_cards = board;
     for pocket in pockets {
-        if all_taken_cards & *pocket != CardSet::new() {
+        if !all_taken_cards.disjoint_with(*pocket) {
             return Err(OddsError::CannotHaveDuplicateCards);
         }
         all_taken_cards |= *pocket;

@@ -178,6 +178,34 @@ fn into_parallel_reduce_with_parallelism<T: Send + Sync, F: Fn(T, T) -> T + Send
     Some(current)
 }
 
+fn parallel_map_chunks_then_combine_with_parallelism<
+    A: Sync,
+    B: Send,
+    C,
+    M: Fn(&[A]) -> B + Send + Sync,
+    R: FnMut(C, B) -> C,
+>(
+    slice: &[A],
+    max_parallelism: NonZero<usize>,
+    mapper: M,
+    seed: C,
+    mut combiner: R,
+) -> C {
+    let subranges = SubrangeIterator::from_range(0..slice.len(), max_parallelism);
+
+    let chunks = thread::scope(|s| {
+        let threads = subranges.map(|subrange| s.spawn(|| mapper(&slice[subrange])));
+        threads.map(|t| t.join().unwrap()).collect::<Vec<B>>()
+    });
+
+    let mut result = seed;
+    for chunk in chunks {
+        result = combiner(result, chunk);
+    }
+
+    result
+}
+
 pub fn parallel_map<T: Sync, U: Send, F: Fn(&T) -> U + Send + Sync>(
     slice: &[T],
     mapper: F,
@@ -197,6 +225,27 @@ pub fn into_parallel_reduce<T: Send + Sync, F: Fn(T, T) -> T + Send + Sync>(
     reducer: F,
 ) -> Option<T> {
     into_parallel_reduce_with_parallelism(vec, get_parallelism_from_os(), reducer)
+}
+
+pub fn parallel_map_chunks_then_combine<
+    A: Sync,
+    B: Send,
+    C,
+    M: Fn(&[A]) -> B + Send + Sync,
+    R: FnMut(C, B) -> C,
+>(
+    slice: &[A],
+    mapper: M,
+    seed: C,
+    combiner: R,
+) -> C {
+    parallel_map_chunks_then_combine_with_parallelism(
+        slice,
+        get_parallelism_from_os(),
+        mapper,
+        seed,
+        combiner,
+    )
 }
 
 #[cfg(test)]
@@ -314,5 +363,20 @@ mod tests {
             into_parallel_reduce_with_parallelism(nums, NonZero::new(3).unwrap(), |a, b| a + b);
 
         assert_eq!(sum, None);
+    }
+
+    #[test]
+    fn test_parallel_map_chunks_then_combine_with_parallelism() {
+        let nums = (0..20).into_iter().collect::<Vec<i32>>();
+
+        let result = parallel_map_chunks_then_combine_with_parallelism(
+            nums.as_slice(),
+            NonZero::new(3).unwrap(),
+            |x| x.iter().sum::<i32>().to_string(),
+            69,
+            |a, c| a + c.parse::<i32>().unwrap(),
+        );
+
+        assert_eq!(result, 190 + 69);
     }
 }
