@@ -17,7 +17,7 @@ fn main() {
     let odds = calculate_odds(pockets, CardSet::new()).unwrap();
     for calc in odds {
         println!("{}", calc.pocket);
-        println!("{:?}", calc.winning_chance);
+        println!("{:?}", calc.outcome);
         println!("{:?}", calc.hand_distribution);
         println!("")
     }

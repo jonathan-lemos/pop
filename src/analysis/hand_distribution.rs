@@ -45,6 +45,55 @@ impl HandDistribution {
     pub fn is_complete(&self) -> bool {
         self.discarded_hands == 0
     }
+
+    pub fn total_num_hands(&self) -> usize {
+        self.straight_flushes
+            + self.four_of_a_kinds
+            + self.full_houses
+            + self.flushes
+            + self.straights
+            + self.three_of_a_kinds
+            + self.two_pairs
+            + self.pairs
+            + self.high_cards
+            + self.discarded_hands
+    }
+
+    pub fn straight_flush_percentage(&self) -> f64 {
+        (self.straight_flushes * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn four_of_a_kind_percentage(&self) -> f64 {
+        (self.four_of_a_kinds * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn full_house_percentage(&self) -> f64 {
+        (self.full_houses * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn flush_percentage(&self) -> f64 {
+        (self.flushes * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn straight_percentage(&self) -> f64 {
+        (self.straights * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn three_of_a_kind_percentage(&self) -> f64 {
+        (self.three_of_a_kinds * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn two_pair_percentage(&self) -> f64 {
+        (self.two_pairs * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn pair_percentage(&self) -> f64 {
+        (self.pairs * 100) as f64 / self.total_num_hands() as f64
+    }
+
+    pub fn high_card_percentage(&self) -> f64 {
+        (self.high_cards * 100) as f64 / self.total_num_hands() as f64
+    }
 }
 
 impl From<CardSet> for HandDistribution {

@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::num::NonZero;
 
 use crate::analysis::evaluate_hand::HandEvaluation;
+use crate::analysis::math::SatisfactionFraction;
 use crate::cards::cardset::CardSet;
 use crate::parallelism::algorithms::{into_parallel_reduce, parallel_map};
 use crate::util::array::{array_map, indexes, into_array_zip};
@@ -83,6 +84,31 @@ impl<const N_PLAYERS: usize> Outcome<N_PLAYERS> {
                 x
             })
         })
+    }
+
+    pub fn total_hand_count(&self) -> usize {
+        self.draws_with.into_iter().fold(0, |a, b| a + b) + self.losses
+    }
+
+    pub fn win_ratio(&self) -> SatisfactionFraction {
+        SatisfactionFraction {
+            satisfying: self.draws_with[0],
+            total: self.total_hand_count(),
+        }
+    }
+
+    pub fn draw_ratio(&self) -> SatisfactionFraction {
+        SatisfactionFraction {
+            satisfying: self.draws_with.into_iter().skip(1).fold(0, |a, b| a + b),
+            total: self.total_hand_count(),
+        }
+    }
+
+    pub fn loss_ratio(&self) -> SatisfactionFraction {
+        SatisfactionFraction {
+            satisfying: self.losses,
+            total: self.total_hand_count(),
+        }
     }
 }
 

@@ -22,6 +22,16 @@ pub struct SatisfactionFraction {
     pub total: usize,
 }
 
+impl SatisfactionFraction {
+    pub fn proportion(&self) -> f64 {
+        self.satisfying as f64 / self.total as f64
+    }
+
+    pub fn percentage(&self) -> f64 {
+        (self.satisfying * 100) as f64 / self.total as f64
+    }
+}
+
 pub fn satisfaction_ratio<T: Send + Sync, P: Fn(&T) -> bool + Send + Sync>(
     slice: &[T],
     predicate: P,

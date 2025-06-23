@@ -3,10 +3,12 @@ use std::ops::Range;
 use crate::analysis::evaluate_hand::HandEvaluation;
 use crate::analysis::hand_distribution::HandDistribution;
 use crate::analysis::math::SatisfactionFraction;
+use crate::analysis::outcomes::Outcome;
 use crate::analysis::search_space::combinations;
 use crate::cards::cardset::CardSet;
 use crate::parallelism::algorithms::{SubrangeIterator, into_parallel_reduce, parallel_map};
 use crate::parallelism::os::get_parallelism_from_os;
+use crate::util::array::{array_map, indexes, into_array_map};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OddsError {
@@ -17,16 +19,16 @@ pub enum OddsError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct OddsCalculation {
+pub struct OddsCalculation<const N_PLAYERS: usize> {
     pub pocket: CardSet,
-    pub winning_chance: SatisfactionFraction,
+    pub outcome: Outcome<N_PLAYERS>,
     pub hand_distribution: HandDistribution,
 }
 
-pub fn calculate_odds(
-    pockets: &[CardSet],
+fn get_all_taken_cards<const N_PLAYERS: usize>(
+    pockets: &[CardSet; N_PLAYERS],
     board: CardSet,
-) -> Result<Vec<OddsCalculation>, OddsError> {
+) -> Result<CardSet, OddsError> {
     if pockets.is_empty() {
         return Err(OddsError::MustHaveAtLeastOnePlayer);
     }
@@ -39,117 +41,79 @@ pub fn calculate_odds(
         return Err(OddsError::BoardCannotHaveMoreThan5Cards);
     }
 
-    let mut all_taken_cards = board;
-    for pocket in pockets {
-        if !all_taken_cards.disjoint_with(*pocket) {
-            return Err(OddsError::CannotHaveDuplicateCards);
-        }
-        all_taken_cards |= *pocket;
+    let mut all_taken_cards = match CardSet::union_if_disjoint(pockets) {
+        Some(v) => v,
+        None => return Err(OddsError::CannotHaveDuplicateCards),
+    };
+    if !all_taken_cards.disjoint_with(board) {
+        return Err(OddsError::CannotHaveDuplicateCards);
     }
+    all_taken_cards |= board;
+
+    Ok(all_taken_cards)
+}
+
+pub fn calculate_odds<const N_PLAYERS: usize>(
+    pockets: &[CardSet; N_PLAYERS],
+    board: CardSet,
+) -> Result<[OddsCalculation<N_PLAYERS>; N_PLAYERS], OddsError> {
+    let all_taken_cards = get_all_taken_cards(pockets, board)?;
 
     let runouts = combinations(CardSet::universe() - all_taken_cards, 5 - board.len());
-    let hand_distributions = pockets
-        .iter()
-        .map(|p| {
-            let hands = parallel_map(runouts.as_slice(), |r| *r | *p);
-            HandDistribution::evaluate(hands.as_slice())
-        })
-        .collect::<Vec<HandDistribution>>();
-
-    let subranges = SubrangeIterator::from_range(0..runouts.len(), get_parallelism_from_os())
-        .collect::<Vec<Range<usize>>>();
-    let pocket_win_chunks = parallel_map(subranges.as_slice(), |range| {
-        let mut ret = (0..pockets.len()).map(|_| 0).collect::<Vec<usize>>();
-
-        for runout in &runouts[range.clone()] {
-            let winning_index = pockets
-                .iter()
-                .enumerate()
-                .map(|(i, pocket)| (HandEvaluation::evaluate_postflop(*pocket | *runout), i))
-                .max()
-                .unwrap()
-                .1;
-            ret[winning_index] += 1;
-        }
-        ret
+    let hand_distributions = array_map(pockets, |pocket| {
+        let hands = parallel_map(runouts.as_slice(), |runout| *runout | *pocket);
+        HandDistribution::evaluate(hands.as_slice())
     });
-    let pocket_wins = into_parallel_reduce(pocket_win_chunks, |a, b| {
-        a.into_iter()
-            .zip(b.into_iter())
-            .map(|(a, b)| a + b)
-            .collect::<Vec<usize>>()
-    })
-    .unwrap();
 
-    Ok(hand_distributions
-        .into_iter()
-        .zip(pocket_wins.into_iter())
-        .enumerate()
-        .map(|(i, (h, p))| OddsCalculation {
-            winning_chance: SatisfactionFraction {
-                satisfying: p,
-                total: runouts.len(),
-            },
-            hand_distribution: h,
-            pocket: pockets[i],
-        })
-        .collect())
+    if hand_distributions.iter().any(|h| !h.is_complete()) {
+        panic!("Internal error computing the hand distributions.");
+    }
+
+    let outcomes = Outcome::evaluate(pockets, runouts.as_slice()).unwrap();
+
+    let result = into_array_map(indexes::<N_PLAYERS>(), |i| OddsCalculation {
+        pocket: pockets[i],
+        outcome: outcomes[i],
+        hand_distribution: hand_distributions[i],
+    });
+
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
+    use super::*;
     use crate::cards::card::Card;
 
-    use super::*;
+    fn assert_roughly_eq(a: f64, b: f64) {
+        assert_eq!(format!("{:.2}", a), format!("{:.2}", b));
+    }
 
     #[test]
     fn test_aks_vs_qq() {
         let aks = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE]);
         let qq = CardSet::from(&[Card::QUEEN_CLUB, Card::QUEEN_DIAMOND]);
 
-        let expected = [
-            OddsCalculation {
-                pocket: aks,
-                winning_chance: SatisfactionFraction {
-                    satisfying: 787966,
-                    total: 1712304,
-                },
-                hand_distribution: HandDistribution {
-                    straight_flushes: 1063,
-                    four_of_a_kinds: 2420,
-                    full_houses: 41716,
-                    flushes: 124370,
-                    straights: 36669,
-                    three_of_a_kinds: 78056,
-                    two_pairs: 392692,
-                    pairs: 736792,
-                    high_cards: 298526,
-                    discarded_hands: 0,
-                },
-            },
-            OddsCalculation {
-                pocket: qq,
-                winning_chance: SatisfactionFraction {
-                    satisfying: 924338,
-                    total: 1712304,
-                },
-                hand_distribution: HandDistribution {
-                    straight_flushes: 289,
-                    four_of_a_kinds: 15620,
-                    full_houses: 149956,
-                    flushes: 38684,
-                    straights: 26313,
-                    three_of_a_kinds: 208787,
-                    two_pairs: 669894,
-                    pairs: 602761,
-                    high_cards: 0,
-                    discarded_hands: 0,
-                },
-            },
-        ]
-        .into_iter()
-        .collect::<HashSet<OddsCalculation>>();
+        let odds = calculate_odds(&[aks, qq], CardSet::new()).unwrap();
+        let aks_odds = &odds[0];
+        let qq_odds = &odds[1];
+
+        assert_roughly_eq(aks_odds.outcome.win_ratio().percentage(), 46.02);
+        assert_roughly_eq(aks_odds.outcome.draw_ratio().percentage(), 0.39);
+        assert_roughly_eq(qq_odds.outcome.win_ratio().percentage(), 53.59);
+        assert_roughly_eq(qq_odds.outcome.draw_ratio().percentage(), 0.39);
+
+        assert_roughly_eq(aks_odds.hand_distribution.straight_flush_percentage(), 0.06);
+        assert_roughly_eq(aks_odds.hand_distribution.four_of_a_kind_percentage(), 0.14);
+        assert_roughly_eq(aks_odds.hand_distribution.full_house_percentage(), 2.44);
+        assert_roughly_eq(aks_odds.hand_distribution.flush_percentage(), 7.26);
+        assert_roughly_eq(aks_odds.hand_distribution.straight_percentage(), 2.14);
+        assert_roughly_eq(
+            aks_odds.hand_distribution.three_of_a_kind_percentage(),
+            4.56,
+        );
+        assert_roughly_eq(aks_odds.hand_distribution.two_pair_percentage(), 22.93);
+        assert_roughly_eq(aks_odds.hand_distribution.pair_percentage(), 43.03);
+        assert_roughly_eq(aks_odds.hand_distribution.high_card_percentage(), 17.43);
     }
 }
