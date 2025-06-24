@@ -14,7 +14,7 @@ fn main() {
         CardSet::from(&[Card::QUEEN_CLUB, Card::QUEEN_DIAMOND]),
     ];
 
-    let odds = calculate_odds(pockets, CardSet::new()).unwrap();
+    let odds = calculate_odds(pockets, CardSet::new());
     for calc in odds {
         println!("{}", calc.pocket);
         println!("{:?}", calc.outcome);

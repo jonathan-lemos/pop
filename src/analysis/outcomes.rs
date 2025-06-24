@@ -3,6 +3,7 @@ use std::num::NonZero;
 
 use crate::analysis::evaluate_hand::HandEvaluation;
 use crate::analysis::math::SatisfactionFraction;
+use crate::analysis::search_space::assert_input_is_well_formed;
 use crate::cards::cardset::CardSet;
 use crate::parallelism::algorithms::{into_parallel_reduce, parallel_map};
 use crate::util::array::{array_map, indexes, into_array_zip};
@@ -17,24 +18,12 @@ impl<const N_PLAYERS: usize> Outcome<N_PLAYERS> {
     pub fn evaluate(
         players: &[CardSet; N_PLAYERS],
         boards: &[CardSet],
-    ) -> Option<[Outcome<N_PLAYERS>; N_PLAYERS]> {
+    ) -> [Outcome<N_PLAYERS>; N_PLAYERS] {
         const { assert!(N_PLAYERS >= 2 && N_PLAYERS <= 23) }
 
-        if players.iter().any(|x| x.len() != 2) {
-            return None;
-        }
-
-        if boards.iter().any(|x| x.len() != 5) {
-            return None;
-        }
-
-        if let Some(player_set) = CardSet::union_if_disjoint(players) {
-            if boards.iter().any(|board| !player_set.disjoint_with(*board)) {
-                return None;
-            }
-        } else {
-            return None;
-        }
+        parallel_map(boards, |board| {
+            assert_input_is_well_formed(players, *board);
+        });
 
         let outcomes = parallel_map(boards, |board| {
             let hand_evals = array_map(players, |pocket| {
@@ -84,6 +73,7 @@ impl<const N_PLAYERS: usize> Outcome<N_PLAYERS> {
                 x
             })
         })
+        .unwrap()
     }
 
     pub fn total_hand_count(&self) -> usize {
@@ -160,7 +150,7 @@ mod tests {
             ]),
         ];
 
-        let outcomes = Outcome::evaluate(players, boards).unwrap();
+        let outcomes = Outcome::evaluate(players, boards);
 
         let expected = [
             Outcome {
@@ -219,7 +209,7 @@ mod tests {
             ]),
         ];
 
-        let outcomes = Outcome::evaluate(players, boards).unwrap();
+        let outcomes = Outcome::evaluate(players, boards);
 
         let expected = [
             Outcome {

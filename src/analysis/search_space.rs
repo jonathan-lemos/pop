@@ -272,8 +272,44 @@ pub fn combinations(pool: CardSet, size: usize) -> Vec<CardSet> {
     ret
 }
 
+pub fn assert_input_is_well_formed(pockets: &[CardSet], board: CardSet) {
+    let _ = undealt_cards(pockets, board);
+}
+
+pub fn undealt_cards(pockets: &[CardSet], board: CardSet) -> CardSet {
+    for pocket in pockets {
+        if pocket.len() != 2 {
+            panic!("All pockets must have 2 cards, but {} doesn't", pocket);
+        }
+    }
+
+    if board.len() > 5 {
+        panic!("The board cannot have more than 5 cards, but has {}", board);
+    }
+
+    let mut set = board;
+    for pocket in pockets {
+        let intersection = set & *pocket;
+        if intersection.len() != 0 {
+            panic!(
+                "Cannot have duplicate cards, but {} appears multiple times",
+                intersection.iter_desc().next().unwrap()
+            )
+        }
+        set |= *pocket;
+    }
+
+    CardSet::universe() - set
+}
+
 pub fn all_seven_card_hands() -> Vec<CardSet> {
     combinations(CardSet::universe(), 7)
+}
+
+pub fn all_boards<const N_PLAYERS: usize>(pockets: &[CardSet; N_PLAYERS]) {
+    if pockets.iter().any(|p| p.len() != 2) {
+        panic!("All pockets must have 2 cards each");
+    }
 }
 
 #[cfg(test)]

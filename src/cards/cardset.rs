@@ -46,17 +46,6 @@ impl CardSet {
     pub fn len(&self) -> usize {
         self.bitset.count_ones() as usize
     }
-
-    pub fn union_if_disjoint(sets: &[CardSet]) -> Option<CardSet> {
-        let mut seen = CardSet::new();
-        for set in sets {
-            if !seen.disjoint_with(*set) {
-                return None;
-            }
-            seen |= *set;
-        }
-        Some(seen)
-    }
 }
 
 impl Add<Card> for CardSet {
@@ -369,43 +358,5 @@ mod tests {
 
         assert!(set1.disjoint_with(set3));
         assert!(set3.disjoint_with(set1));
-    }
-
-    #[test]
-    fn test_union_if_disjoint_not_disjoint() {
-        let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE]);
-        let set2 = CardSet::from(&[Card::QUEEN_SPADE, Card::TEN_SPADE]);
-        let set3 = CardSet::from(&[
-            Card::NINE_DIAMOND,
-            Card::TEN_SPADE,
-            Card::JACK_SPADE,
-            Card::QUEEN_SPADE,
-        ]);
-
-        assert_eq!(CardSet::union_if_disjoint(&[set1, set2, set3]), None);
-    }
-
-    #[test]
-    fn test_union_if_disjoint() {
-        let set1 = CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE]);
-        let set2 = CardSet::from(&[Card::QUEEN_SPADE, Card::TEN_SPADE]);
-        let set3 = CardSet::from(&[Card::NINE_DIAMOND, Card::JACK_SPADE]);
-
-        assert_eq!(
-            CardSet::union_if_disjoint(&[set1, set2, set3]),
-            Some(CardSet::from(&[
-                Card::ACE_SPADE,
-                Card::KING_SPADE,
-                Card::QUEEN_SPADE,
-                Card::TEN_SPADE,
-                Card::NINE_DIAMOND,
-                Card::JACK_SPADE
-            ]))
-        );
-    }
-
-    #[test]
-    fn test_union_if_disjoint_empty() {
-        assert_eq!(CardSet::union_if_disjoint(&[]), Some(CardSet::new()));
     }
 }
