@@ -1,20 +1,28 @@
-use crate::analysis::odds::calculate_odds;
-use crate::util::ui::{parse_input, print_odds};
+use std::process::ExitCode;
+
+use crate::operations::showdown::{calculate_odds_from_showdown, print_odds};
+use crate::ui::input::parse_input;
 
 mod analysis;
 mod cards;
 mod datastructures;
+mod operations;
 mod parallelism;
 mod test_util;
+mod ui;
 mod util;
 
-fn main() {
-    let args = std::env::args().collect::<Vec<String>>();
-    let input = parse_input(&args[1..]);
+fn main() -> ExitCode {
+    let input = match parse_input(std::env::args()) {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
 
-    let odds = calculate_odds(&input.pockets, input.board);
-    for player in odds {
+    let odds = calculate_odds_from_showdown(&input);
+    for player in odds.iter() {
         print_odds(player);
         println!();
     }
+
+    ExitCode::SUCCESS
 }

@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     cards::card::{ALL_CARDS, Card, card_index},
-    util::ui::format_separated_values,
+    ui::output::format_separated_values,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -34,6 +34,10 @@ impl CardSet {
 
     pub fn has(&self, card: Card) -> bool {
         self.bitset & ((1 as u64) << card_index(card)) != 0
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn iter_desc(&self) -> impl Iterator<Item = Card> {

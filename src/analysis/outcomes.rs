@@ -9,16 +9,16 @@ use crate::parallelism::algorithms::{into_parallel_reduce, parallel_map};
 use crate::util::array::{array_map, indexes, into_array_zip};
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
-pub struct Outcome<const N_PLAYERS: usize> {
+pub struct ArrayOutcome<const N_PLAYERS: usize> {
     pub draws_with: [usize; N_PLAYERS],
     pub losses: usize,
 }
 
-impl<const N_PLAYERS: usize> Outcome<N_PLAYERS> {
+impl<const N_PLAYERS: usize> ArrayOutcome<N_PLAYERS> {
     pub fn evaluate(
         players: &[CardSet; N_PLAYERS],
         boards: &[CardSet],
-    ) -> [Outcome<N_PLAYERS>; N_PLAYERS] {
+    ) -> [ArrayOutcome<N_PLAYERS>; N_PLAYERS] {
         const { assert!(N_PLAYERS >= 2 && N_PLAYERS <= 23) }
 
         parallel_map(boards, |board| {
@@ -31,7 +31,7 @@ impl<const N_PLAYERS: usize> Outcome<N_PLAYERS> {
                 HandEvaluation::evaluate_postflop(hand).unwrap()
             });
 
-            let mut outcomes = [Outcome {
+            let mut outcomes = [Self {
                 losses: 0,
                 draws_with: [0; N_PLAYERS],
             }; N_PLAYERS];
@@ -102,6 +102,56 @@ impl<const N_PLAYERS: usize> Outcome<N_PLAYERS> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Outcome {
+    pub draws_with: Vec<usize>,
+    pub losses: usize,
+}
+
+impl Outcome {
+    pub fn evaluate<const N_PLAYERS: usize>(
+        players: &[CardSet; N_PLAYERS],
+        boards: &[CardSet],
+    ) -> Vec<Self> {
+        let outcomes = ArrayOutcome::evaluate(players, boards);
+        outcomes.into_iter().map(Outcome::from).collect()
+    }
+
+    pub fn total_hand_count(&self) -> usize {
+        self.draws_with.iter().fold(0, |a, b| a + b) + self.losses
+    }
+
+    pub fn win_ratio(&self) -> SatisfactionFraction {
+        SatisfactionFraction {
+            satisfying: self.draws_with[0],
+            total: self.total_hand_count(),
+        }
+    }
+
+    pub fn draw_ratio(&self) -> SatisfactionFraction {
+        SatisfactionFraction {
+            satisfying: self.draws_with.iter().skip(1).fold(0, |a, b| a + b),
+            total: self.total_hand_count(),
+        }
+    }
+
+    pub fn loss_ratio(&self) -> SatisfactionFraction {
+        SatisfactionFraction {
+            satisfying: self.losses,
+            total: self.total_hand_count(),
+        }
+    }
+}
+
+impl<const N_PLAYERS: usize> From<ArrayOutcome<N_PLAYERS>> for Outcome {
+    fn from(value: ArrayOutcome<N_PLAYERS>) -> Self {
+        Self {
+            draws_with: value.draws_with.to_vec(),
+            losses: value.losses,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::cards::card::Card;
@@ -150,14 +200,14 @@ mod tests {
             ]),
         ];
 
-        let outcomes = Outcome::evaluate(players, boards);
+        let outcomes = ArrayOutcome::evaluate(players, boards);
 
         let expected = [
-            Outcome {
+            ArrayOutcome {
                 draws_with: [2, 1],
                 losses: 1,
             },
-            Outcome {
+            ArrayOutcome {
                 draws_with: [1, 1],
                 losses: 2,
             },
@@ -209,19 +259,94 @@ mod tests {
             ]),
         ];
 
-        let outcomes = Outcome::evaluate(players, boards);
+        let outcomes = ArrayOutcome::evaluate(players, boards);
 
         let expected = [
-            Outcome {
+            ArrayOutcome {
                 draws_with: [0, 1, 1],
                 losses: 2,
             },
-            Outcome {
+            ArrayOutcome {
                 draws_with: [1, 1, 1],
                 losses: 1,
             },
-            Outcome {
+            ArrayOutcome {
                 draws_with: [1, 0, 1],
+                losses: 2,
+            },
+        ];
+
+        assert_eq!(expected, outcomes);
+    }
+
+    #[test]
+    fn test_generic_outcome_from_outcome() {
+        let outcome = ArrayOutcome {
+            draws_with: [1, 2, 3],
+            losses: 69,
+        };
+
+        let expected = Outcome {
+            draws_with: vec![1, 2, 3],
+            losses: 69,
+        };
+
+        let actual = Outcome::from(outcome);
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn test_generic_outcome_heads_up() {
+        let players = &[
+            CardSet::from(&[Card::ACE_SPADE, Card::KING_SPADE]),
+            CardSet::from(&[Card::JACK_CLUB, Card::JACK_HEART]),
+        ];
+
+        let boards = &[
+            // JJ wins
+            CardSet::from(&[
+                Card::EIGHT_HEART,
+                Card::TWO_CLUB,
+                Card::NINE_SPADE,
+                Card::JACK_DIAMOND,
+                Card::QUEEN_HEART,
+            ]),
+            // AKs wins
+            CardSet::from(&[
+                Card::EIGHT_HEART,
+                Card::TWO_CLUB,
+                Card::NINE_SPADE,
+                Card::ACE_DIAMOND,
+                Card::QUEEN_HEART,
+            ]),
+            // AKs wins
+            CardSet::from(&[
+                Card::EIGHT_HEART,
+                Card::TWO_CLUB,
+                Card::NINE_SPADE,
+                Card::KING_DIAMOND,
+                Card::QUEEN_HEART,
+            ]),
+            // both tie
+            CardSet::from(&[
+                Card::ACE_DIAMOND,
+                Card::KING_DIAMOND,
+                Card::QUEEN_DIAMOND,
+                Card::JACK_DIAMOND,
+                Card::TEN_DIAMOND,
+            ]),
+        ];
+
+        let outcomes = Outcome::evaluate(players, boards);
+
+        let expected = vec![
+            Outcome {
+                draws_with: vec![2, 1],
+                losses: 1,
+            },
+            Outcome {
+                draws_with: vec![1, 1],
                 losses: 2,
             },
         ];

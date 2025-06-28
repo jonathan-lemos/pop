@@ -1,4 +1,4 @@
-use crate::util::ui::format_separated_values;
+use crate::ui::output::format_separated_values;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
