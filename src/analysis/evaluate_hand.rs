@@ -1,11 +1,10 @@
 use self::HandEvaluation::*;
-use crate::analysis::rank_counter::{self, RankCounter};
+use crate::analysis::rank_counter::RankCounter;
 use crate::analysis::suit_grouping::SuitGrouping;
 use crate::cards::card::{ALL_RANKS, ALL_SUITS, Card, Rank};
 use crate::cards::cardset::CardSet;
 use crate::datastructures::stack_vec::StackVec;
 use std::cmp::Reverse;
-use std::mem::MaybeUninit;
 
 pub const MAX_HAND_SIZE: usize = 7;
 

@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_stack_vec_from() {
-        let mut v1 = StackVec::<i32, 3>::from([1, 2]);
+        let v1 = StackVec::<i32, 3>::from([1, 2]);
 
         let mut v2 = StackVec::<i32, 3>::new();
         v2.push(1);
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_stack_vec_from_ref() {
-        let mut v1 = StackVec::<i32, 3>::from(&[1, 2]);
+        let v1 = StackVec::<i32, 3>::from(&[1, 2]);
 
         let mut v2 = StackVec::<i32, 3>::new();
         v2.push(1);

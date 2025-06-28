@@ -100,10 +100,7 @@ impl From<CardSet> for HandDistribution {
     fn from(value: CardSet) -> Self {
         let mut dist = Self::new();
         match HandEvaluation::evaluate_postflop(value) {
-            None => {
-                panic!("{} failed to evaluate", value);
-                dist.discarded_hands += 1;
-            }
+            None => dist.discarded_hands += 1,
             Some(HandEvaluation::StraightFlush { highest_rank: _ }) => dist.straight_flushes += 1,
             Some(HandEvaluation::FourOfAKind { rank: _, kicker: _ }) => dist.four_of_a_kinds += 1,
             Some(HandEvaluation::FullHouse { triple: _, pair: _ }) => dist.full_houses += 1,

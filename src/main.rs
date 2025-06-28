@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::process::ExitCode;
 
 use crate::operations::showdown::{calculate_odds_from_showdown, print_odds};
@@ -8,7 +9,6 @@ mod cards;
 mod datastructures;
 mod operations;
 mod parallelism;
-mod test_util;
 mod ui;
 mod util;
 
